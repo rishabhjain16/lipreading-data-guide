@@ -1,5 +1,8 @@
 # LRS2 Dataset Preparation Guide
 
+## Overview
+This project is based on [Auto-AVSR data preparation](https://github.com/mpc001/auto_avsr/tree/main/preparation), however we have simplified the scripts to work with ease. You can follow the original Auto-AVSR approach or use the streamlined scripts we provide here.
+
 ## New: Single Script Preprocessing
 
 For a simplified approach, use the all-in-one preprocessing script:
@@ -10,6 +13,7 @@ python preparation/step1_prepare_lrs2_all.py \
   --root-dir /path/to/output \
   --subset train \
   --dataset lrs2 \
+  --detector mediapipe \
   --crop-type lips
 ```
 
@@ -17,6 +21,10 @@ python preparation/step1_prepare_lrs2_all.py \
 - `--crop-type lips`: 96x96 mouth region (default)
 - `--crop-type face`: 128x128 face region using landmarks
 - `--crop-type full`: Original video size
+
+**Detector Options:**
+- `--detector mediapipe`: Use MediaPipe face detector (default)
+- `--detector retinaface`: Use RetinaFace detector (requires GPU)
 
 **Output directories:**
 - Lips: `lrs2_video_seg16s/`
@@ -31,30 +39,19 @@ for subset in train val test; do
     --root-dir /path/to/output \
     --subset $subset \
     --dataset lrs2 \
+    --detector mediapipe \
     --crop-type lips
 done
 ```
 
 
-
-## Alternative: Step-by-Step Approach
-
-## Prerequisites
-Follow the steps in [auto_avsr](https://github.com/mpc001/auto_avsr/tree/main/preparation) or use the preparation folder (same as auto_avsr prep) until you get the segmented video folder.
-
 **Note:** The target directory name depends on your chosen segment size:
-- `lrs2_video_seg16s` (for 16-second segments)
+- `lrs2_video_seg16s` (for 16-second segments)  
 - `lrs2_video_seg24s` (for 24-second segments)
 
-**Example Directory Structure After Auto-AVSR:**
-```
-/home/rishabh/Desktop/Datasets/lrs2_ffs/lrs2/lrs2_video_seg16s/
-├── main/
-├── pretrain/
-└── (audio/video files will be here)
-```
 
-## Metadata Prep (2 Steps Only!)
+
+## Metadata Prep
 
 ### Step 2: Process Metadata
 Generate file lists and copy dataset splits in one command:
