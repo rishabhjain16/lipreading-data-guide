@@ -156,17 +156,7 @@ Your LRS2 dataset is now ready for training. The final processed data will be in
     └── spm1000/
 ```
 
-## Troubleshooting
-
-### Common Issues:
-1. **Missing files error**: Check that your LRS2 directory structure is correct
-2. **Import errors**: Install required packages:
-   ```bash
-   pip install pandas tqdm opencv-python scipy
-   ```
-3. **Path issues**: Always use absolute paths for better reliability
-
-### Directory Structure Expected:
+## Directory Structure Expected:
 ```
 Option 1 - Labels in original LRS2:
 /home/rishabh/Desktop/Datasets/lrs2/
