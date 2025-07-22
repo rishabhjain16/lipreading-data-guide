@@ -5,7 +5,7 @@
 For a simplified approach, use the all-in-one preprocessing script:
 
 ```bash
-python preparation/prepare_lrs2_all.py \
+python preparation/step1_prepare_lrs2_all.py \
   --data-dir /path/to/original/lrs2 \
   --root-dir /path/to/output \
   --subset train \
@@ -26,7 +26,7 @@ python preparation/prepare_lrs2_all.py \
 Process all subsets:
 ```bash
 for subset in train val test; do
-  python preparation/prepare_lrs2_all.py \
+  python preparation/step1_prepare_lrs2_all.py \
     --data-dir /path/to/lrs2 \
     --root-dir /path/to/output \
     --subset $subset \
@@ -56,18 +56,18 @@ Follow the steps in [auto_avsr](https://github.com/mpc001/auto_avsr/tree/main/pr
 
 ## Metadata Prep (2 Steps Only!)
 
-### Step 1: Data Preparation
+### Step 2: Process Metadata
 Generate file lists and copy dataset splits in one command:
 
 ```bash
-python prepare_lrs2_data.py \
+python step2_process_metadata.py \
   --lrs2-root /path/to/original/lrs2 \
   --target-dir /path/to/processed/lrs2/lrs2_video_segXXs
 ```
 
 **Example:**
 ```bash
-python prepare_lrs2_data.py \
+python step2_process_metadata.py \
   --lrs2-root /home/rishabh/Desktop/Datasets/lrs2 \
   --target-dir /home/rishabh/Desktop/Datasets/lrs2_ffs/lrs2/lrs2_video_seg16s
 ```
@@ -85,11 +85,11 @@ python prepare_lrs2_data.py \
 - ✅ Saves them directly to the target directory 
 - ✅ Copies dataset split files (`train.txt`, `val.txt`, `test.txt`, `pretrain.txt`)
 
-### Step 2: Data Processing  
+### Step 3: Metadata Prep  
 Count frames and create manifest files in one command:
 
 ```bash
-python process_lrs2_data.py \
+python step3_metadata_prep.py \
   --lrs2-data-dir /path/to/processed/lrs2/lrs2_video_segXXs \
   --metadata-dir /path/to/processed/lrs2/metadata \
   --vocab-size 1000
@@ -97,7 +97,7 @@ python process_lrs2_data.py \
 
 **Example:**
 ```bash
-python process_lrs2_data.py \
+python step3_metadata_prep.py \
   --lrs2-data-dir /home/rishabh/Desktop/Datasets/lrs2_ffs/lrs2/lrs2_video_seg16s \
   --metadata-dir /home/rishabh/Desktop/Datasets/lrs2_ffs/lrs2/metadata \
   --vocab-size 1000
@@ -120,12 +120,12 @@ python process_lrs2_data.py \
 **Note for face/full modes:** If using `--crop-type face` or `--crop-type full`, use the suffixed directories with the step-by-step scripts:
 ```bash
 # For face mode
-python prepare_lrs2_data.py --target-dir /path/to/lrs2_video_seg16s_face
-python process_lrs2_data.py --lrs2-data-dir /path/to/lrs2_video_seg16s_face
+python step2_process_metadata.py --target-dir /path/to/lrs2_video_seg16s_face
+python step3_metadata_prep.py --lrs2-data-dir /path/to/lrs2_video_seg16s_face
 
 # For full mode  
-python prepare_lrs2_data.py --target-dir /path/to/lrs2_video_seg16s_full
-python process_lrs2_data.py --lrs2-data-dir /path/to/lrs2_video_seg16s_full
+python step2_process_metadata.py --target-dir /path/to/lrs2_video_seg16s_full
+python step3_metadata_prep.py --lrs2-data-dir /path/to/lrs2_video_seg16s_full
 ```
 
 ---
