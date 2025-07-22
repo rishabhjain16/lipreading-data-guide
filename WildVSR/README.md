@@ -1,6 +1,7 @@
 # WildVSR Dataset Preparation
 
-Simple preparation of WildVSR dataset for inference.
+Simple preparation of WildVSR dataset for inference. 
+WildVSR available at: https://github.com/YasserdahouML/VSR_test_set 
 
 ## Overview
 
