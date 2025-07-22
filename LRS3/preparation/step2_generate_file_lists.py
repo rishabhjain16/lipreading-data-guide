@@ -9,15 +9,22 @@ import pandas as pd
 from pathlib import Path
 
 def main():
-    parser = argparse.ArgumentParser(description='Generate file.list and label.list from CSV files')
+    parser = argparse.ArgumentParser(description="Generate file.list and label.list from LRS3 CSV files")
     parser.add_argument('--lrs3-data-dir', type=str, required=True,
-                        help='LRS3 data directory where file.list and label.list will be created')
+                        help='LRS3 processed data directory (lrs3_video_seg16s[_face|_full])')
     parser.add_argument('--labels-dir', type=str, default=None,
                         help='Directory containing CSV files (default: auto-detect)')
     
     args = parser.parse_args()
     
     lrs3_data_dir = Path(args.lrs3_data_dir)
+    
+    # Detect crop type from directory name
+    crop_type = "lips"  # default
+    if "_face" in lrs3_data_dir.name:
+        crop_type = "face"
+    elif "_full" in lrs3_data_dir.name:
+        crop_type = "full"
     
     # Auto-detect labels directory if not provided
     if args.labels_dir is None:
@@ -40,14 +47,17 @@ def main():
     
     print(f"📁 Data directory: {lrs3_data_dir}")
     print(f"📁 Labels directory: {labels_dir}")
+    print(f"🎥 Detected crop type: {crop_type}")
     
-    # Process CSV files
-    fids, labels = [], []
+    # Process CSV files (with crop type suffix for face/full)
+    crop_suffix = f"_{crop_type}" if crop_type != "lips" else ""
     csv_files = {
-        'train': 'lrs3_train_transcript_lengths_seg16s.csv',
-        'val': 'lrs3_val_transcript_lengths_seg16s.csv',
-        'test': 'lrs3_test_transcript_lengths_seg16s.csv'
+        'train': f'lrs3_train_transcript_lengths_seg16s{crop_suffix}.csv',
+        'val': f'lrs3_val_transcript_lengths_seg16s{crop_suffix}.csv',
+        'test': f'lrs3_test_transcript_lengths_seg16s{crop_suffix}.csv'
     }
+    
+    fids, labels = [], []
     
     for split, csv_file in csv_files.items():
         csv_path = labels_dir / csv_file
@@ -68,11 +78,13 @@ def main():
             
             # Extract the actual text from the corresponding text file
             # Convert video path to corresponding text file path
-            # e.g., lrs3_video_seg16s/test/xTkKSJSqUSI/00009.mp4 -> test/xTkKSJSqUSI/00009.txt
+            # e.g., lrs3_video_seg16s_full/test/xTkKSJSqUSI/00009.mp4 -> test/xTkKSJSqUSI/00009.txt
             txt_file_path = video_path.replace('.mp4', '.txt')
-            # Remove the lrs3_video_seg16s/ prefix to get the relative path
-            if txt_file_path.startswith('lrs3_video_seg16s/'):
-                txt_file_path = txt_file_path[len('lrs3_video_seg16s/'):]
+            
+            # Remove the video directory prefix (crop-type aware) to get the relative path
+            video_dir_prefix = f'lrs3_video_seg16s{crop_suffix}/'
+            if txt_file_path.startswith(video_dir_prefix):
+                txt_file_path = txt_file_path[len(video_dir_prefix):]
             
             # Look in the lrs3_text_seg16s directory (sibling to lrs3_video_seg16s)
             text_dir = lrs3_data_dir.parent / 'lrs3_text_seg16s'
