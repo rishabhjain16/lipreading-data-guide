@@ -9,11 +9,48 @@ import cv2
 import shutil
 import argparse
 import subprocess
+import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
 from scipy.io import wavfile
 from gen_subword import gen_vocab
 from tempfile import NamedTemporaryFile
+
+def load_data_from_csv_files(labels_dir, lrs3_data_dir):
+    """Load file IDs and labels from CSV files created by Step 1"""
+    print("📊 Loading data from CSV files...")
+    
+    fids, labels = [], []
+    csv_files = {
+        'train': 'lrs3_train_transcript_lengths_seg16s.csv',
+        'val': 'lrs3_val_transcript_lengths_seg16s.csv', 
+        'test': 'lrs3_test_transcript_lengths_seg16s.csv'
+    }
+    
+    for split, csv_file in csv_files.items():
+        csv_path = os.path.join(labels_dir, csv_file)
+        if not os.path.exists(csv_path):
+            print(f"  ⚠️  Warning: {csv_file} not found, skipping {split}")
+            continue
+            
+        print(f"  📝 Processing {split}: {csv_file}")
+        df = pd.read_csv(csv_path, header=None)
+        
+        for _, row in df.iterrows():
+            dataset_name = row[0]  # lrs3
+            video_path = row[1]    # path to video file
+            length = row[2]        # video length
+            token_ids = row[3]     # tokenized text
+            
+            # Convert token IDs back to text (simplified approach)
+            # For now, we'll use the token IDs as placeholder text
+            # In a full implementation, you'd need the tokenizer to decode
+            
+            fids.append(video_path.replace('.mp4', ''))
+            labels.append(f"placeholder_text_for_{video_path}")  # Simplified
+    
+    print(f"  ✅ Loaded {len(fids)} files total")
+    return fids, labels
 
 def count_frames(fids, base_dir):
     """Count frames in audio and video files"""
@@ -21,8 +58,13 @@ def count_frames(fids, base_dir):
     total_num_frames = []
     
     for fid in tqdm(fids, desc="Counting frames"):
-        wav_fn = os.path.join(base_dir, fid + ".wav")
-        video_fn = os.path.join(base_dir, fid + ".mp4")
+        # Remove lrs3_video_seg16s/ prefix if present to get the relative path
+        clean_fid = fid
+        if clean_fid.startswith('lrs3_video_seg16s/'):
+            clean_fid = clean_fid[len('lrs3_video_seg16s/'):]
+        
+        wav_fn = os.path.join(base_dir, clean_fid + ".wav")
+        video_fn = os.path.join(base_dir, clean_fid + ".mp4")
         
         if not os.path.exists(wav_fn):
             print(f"⚠️  Missing audio file: {wav_fn}")
@@ -50,8 +92,13 @@ def check_missing_files(fids, base_dir):
     missing = []
     
     for fid in tqdm(fids, desc="Checking files"):
-        wav_fn = os.path.join(base_dir, fid + ".wav")
-        video_fn = os.path.join(base_dir, fid + ".mp4")
+        # Remove lrs3_video_seg16s/ prefix if present to get the relative path
+        clean_fid = fid
+        if clean_fid.startswith('lrs3_video_seg16s/'):
+            clean_fid = clean_fid[len('lrs3_video_seg16s/'):]
+        
+        wav_fn = os.path.join(base_dir, clean_fid + ".wav")
+        video_fn = os.path.join(base_dir, clean_fid + ".mp4")
         is_file = os.path.isfile(wav_fn) and os.path.isfile(video_fn)
         
         if not is_file:
@@ -107,10 +154,13 @@ def create_manifest_files(lrs3_data_dir, metadata_dir, vocab_size):
     vocab_dir.mkdir(parents=True, exist_ok=True)
     smp_filename_prefix = f"spm_unigram{vocab_size}"
     
-    with NamedTemporaryFile(mode="w") as f:
+    with NamedTemporaryFile(mode="w", delete=False) as f:
         label_text = [ln.strip() for ln in open(label_list).readlines()]
+        print(f"  📊 Processing {len(label_text)} labels for vocabulary")
         for t in label_text:
             f.write(t.lower() + "\n")
+        f.flush()  # Ensure all data is written to the file
+        print(f"  📄 Temporary file created: {f.name}")
         gen_vocab(Path(f.name), vocab_dir/smp_filename_prefix, 'unigram', vocab_size)
     
     vocab_path = (vocab_dir/smp_filename_prefix).as_posix() + '.txt'
@@ -126,21 +176,26 @@ def create_manifest_files(lrs3_data_dir, metadata_dir, vocab_size):
             with open(f"{target_dir}/{name}.tsv", 'w') as fo:
                 fo.write('/\n')
                 for fid, _, nf_audio, nf_video in data:
+                    # Handle our file ID format: lrs3_video_seg16s/trainval/speaker/video
+                    clean_fid = fid
+                    if clean_fid.startswith('lrs3_video_seg16s/'):
+                        clean_fid = clean_fid[len('lrs3_video_seg16s/'):]
+                    
                     # Determine the subset based on path (trainval, test, or pretrain)
-                    if 'pretrain' in fid:
+                    if 'pretrain' in clean_fid:
                         prefix = 'pretrain'
-                        clean_fid = fid.replace('pretrain/', '')
-                    elif 'test' in fid:
-                        prefix = 'test'
-                        clean_fid = fid.replace('test/', '')
+                        final_fid = clean_fid.replace('pretrain/', '')
+                    elif 'test' in clean_fid:
+                        prefix = 'test' 
+                        final_fid = clean_fid.replace('test/', '')
                     else:  # trainval
                         prefix = 'trainval'
-                        clean_fid = fid.replace('trainval/', '')
+                        final_fid = clean_fid.replace('trainval/', '')
                     
                     fo.write('\t'.join([
-                        clean_fid,
-                        os.path.abspath(f"{lrs3_data_dir}/{prefix}/{clean_fid}.mp4"),
-                        os.path.abspath(f"{lrs3_data_dir}/{prefix}/{clean_fid}.wav"),
+                        final_fid,
+                        os.path.abspath(f"{lrs3_data_dir}/{prefix}/{final_fid}.mp4"),
+                        os.path.abspath(f"{lrs3_data_dir}/{prefix}/{final_fid}.wav"),
                         str(nf_video),
                         str(nf_audio)
                     ])+'\n')
@@ -174,19 +229,27 @@ def create_manifest_files(lrs3_data_dir, metadata_dir, vocab_size):
         test_ids = set(line.strip().split()[0] for line in open(test_split_file))
     
     for fid, label, nf_audio, nf_video in zip(fids, labels, nfs_audio, nfs_video):
-        # Extract clean file ID for comparison
-        if 'pretrain' in fid:
-            clean_fid = fid.replace('pretrain/', '')
-        elif 'test' in fid:
-            clean_fid = fid.replace('test/', '')
-        else:  # trainval
-            clean_fid = fid.replace('trainval/', '')
+        # Extract clean file ID for comparison with split files
+        # First remove lrs3_video_seg16s/ prefix if present
+        clean_fid = fid
+        if clean_fid.startswith('lrs3_video_seg16s/'):
+            clean_fid = clean_fid[len('lrs3_video_seg16s/'):]
+        
+        # Then remove directory prefix to get speaker/video format  
+        if 'pretrain/' in clean_fid:
+            final_fid = clean_fid.replace('pretrain/', '')
+        elif 'test/' in clean_fid:
+            final_fid = clean_fid.replace('test/', '')
+        elif 'trainval/' in clean_fid:
+            final_fid = clean_fid.replace('trainval/', '')
+        else:
+            final_fid = clean_fid
         
         data_item = [fid, label, nf_audio, nf_video]
         
-        if 'test' in fid or clean_fid in test_ids:
+        if 'test' in fid or final_fid in test_ids:
             test.append(data_item)
-        elif clean_fid in valid_ids:
+        elif final_fid in valid_ids:
             valid.append(data_item)
         else:
             train.append(data_item)
@@ -227,6 +290,7 @@ def main():
     file_list_path = lrs3_data_dir / 'file.list'
     if not file_list_path.exists():
         print(f"❌ Error: file.list not found in: {lrs3_data_dir}")
+        print("💡 Try running step2_simple.py first to generate file.list and label.list")
         return 1
     
     print(f"🚀 Starting LRS3 processing...")

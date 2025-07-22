@@ -3,9 +3,18 @@
 ## Overview
 This project is based on [Auto-AVSR data preparation](https://github.com/mpc001/auto_avsr/tree/main/preparation), however we have simplified the scripts to work with ease. You can follow the original Auto-AVSR approach or use the streamlined scripts we provide here.
 
-## New: Single Script Preprocessing
+### Setup
 
-For a simplified approach, use the all-in-one preprocessing script:
+Install all dependency-packages.
+
+```Shell
+pip install -r requirements.txt
+pip install torch torchvision torchaudio pytorch-lightning sentencepiece av 
+```
+
+
+
+### Step 1 - Auto_AVSR style output
 
 ```bash
 python preparation/step1_prepare_lrs2_all.py \
@@ -49,9 +58,6 @@ done
 - `lrs2_video_seg16s` (for 16-second segments)  
 - `lrs2_video_seg24s` (for 24-second segments)
 
-
-
-## Metadata Prep
 
 ### Step 2: Process Metadata
 Generate file lists and copy dataset splits in one command:
@@ -126,7 +132,7 @@ python step3_metadata_prep.py --lrs2-data-dir /path/to/lrs2_video_seg16s_full
 ```
 
 ---
-## That's it! 🎉
+
 
 Your LRS2 dataset is now ready for training. The final processed data will be in:
 ```
@@ -151,33 +157,5 @@ Your LRS2 dataset is now ready for training. The final processed data will be in
     ├── train.wrd, valid.wrd, test.wrd
     ├── dict.wrd.txt
     └── spm1000/
-```
-
-## Directory Structure Expected:
-```
-Option 1 - Labels in original LRS2:
-/home/rishabh/Desktop/Datasets/lrs2/
-├── labels/                          # CSV files with transcripts
-├── lrs2/lrs2_text_seg16s/          # Text transcripts
-└── train.txt, val.txt, test.txt, pretrain.txt
-
-Option 2 - Labels in processed LRS2 (auto_avsr output):
-/home/rishabh/Desktop/Datasets/lrs2_ffs/lrs2/
-├── labels/                          # CSV files (from auto_avsr)
-├── lrs2_text_seg16s/               # Text transcripts (from auto_avsr)
-├── train.txt, val.txt, test.txt, pretrain.txt
-└── lrs2_video_seg16s/              # Segmented videos
-    ├── main/
-    └── pretrain/
-
-Final Output:
-/home/rishabh/Desktop/Datasets/lrs2_ffs/lrs2/
-├── lrs2_video_seg16s/              # Contains generated files
-│   ├── file.list, label.list
-│   ├── nframes.audio, nframes.video
-│   └── train.txt, val.txt, test.txt, pretrain.txt
-└── metadata/                        # Generated manifest files
-    ├── train.tsv, valid.tsv, test.tsv
-    └── dict.wrd.txt, etc.
 ```
 
