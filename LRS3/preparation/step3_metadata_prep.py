@@ -16,15 +16,31 @@ from scipy.io import wavfile
 from gen_subword import gen_vocab
 from tempfile import NamedTemporaryFile
 
+def detect_crop_type(lrs3_data_dir):
+    """Detect crop type from directory name suffix"""
+    dir_name = os.path.basename(lrs3_data_dir.rstrip('/'))
+    
+    if dir_name.endswith('_face'):
+        return 'face'
+    elif dir_name.endswith('_full'):
+        return 'full'
+    else:
+        return 'lips'  # default
+
 def load_data_from_csv_files(labels_dir, lrs3_data_dir):
     """Load file IDs and labels from CSV files created by Step 1"""
     print("📊 Loading data from CSV files...")
     
+    # Detect crop type from directory name
+    crop_type = detect_crop_type(lrs3_data_dir)
+    crop_suffix = f"_{crop_type}" if crop_type != "lips" else ""
+    print(f"🎥 Detected crop type: {crop_type}")
+    
     fids, labels = [], []
     csv_files = {
-        'train': 'lrs3_train_transcript_lengths_seg16s.csv',
-        'val': 'lrs3_val_transcript_lengths_seg16s.csv', 
-        'test': 'lrs3_test_transcript_lengths_seg16s.csv'
+        'train': f'lrs3_train_transcript_lengths_seg16s{crop_suffix}.csv',
+        'val': f'lrs3_val_transcript_lengths_seg16s{crop_suffix}.csv', 
+        'test': f'lrs3_test_transcript_lengths_seg16s{crop_suffix}.csv'
     }
     
     for split, csv_file in csv_files.items():
