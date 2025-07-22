@@ -1,7 +1,22 @@
 # LRS3 Dataset Preparation Guide
 
 ## Overview
-This project is based on [Auto-AVSR data preparation](https://github.com/mpc001/auto_avsr/tree/main/preparation), however we have simplified the scripts to work with ease. You can follow the original Auto-AVSR approach or use the streamlined scripts we provide here.
+This project is based on [Auto-AVSR data preparation](https://github.com/mpc001/auto_avsr/tree/main/preparation), however we have simplified the scripts to work with ea└── metadata/                       # Step 3 output: Final training files
+    ├── train.tsv                   # Training manifest
+    ├── valid.tsv                   # Validation manifest  
+    ├── test.tsv                    # Test manifest
+    ├── train.wrd                   # Training transcripts (words)
+    ├── valid.wrd                   # Validation transcripts (words)
+    ├── test.wrd                    # Test transcripts (words)
+    ├── dict.wrd.txt                # Word vocabulary dictionary
+    ├── train.phn                   # Training transcripts (phonemes) [OPTIONAL]
+    ├── valid.phn                   # Validation transcripts (phonemes) [OPTIONAL]
+    ├── test.phn                    # Test transcripts (phonemes) [OPTIONAL]
+    ├── dict.phn.txt                # Phoneme vocabulary dictionary [OPTIONAL]
+    └── smp1000/                    # SentencePiece vocabulary files
+        ├── spm_unigram1000.model
+        ├── smp_unigram1000.vocab
+        └── spm_unigram1000.txtfollow the original Auto-AVSR approach or use the streamlined scripts we provide here.
 
 ## Setup
 Before processing LRS3 data, download the validation split file:
@@ -45,6 +60,23 @@ python preparation/step3_metadata_prep.py \
   --metadata-dir /path/to/processed/lrs3/metadata \
   --vocab-size 1000
 ```
+
+### Optional: Phoneme Conversion
+Convert word transcripts to phoneme transcripts for phoneme-based training:
+
+```bash
+python ../Phones/create_phoneme_metadata.py \
+  --metadata-dir /path/to/processed/lrs3/metadata
+```
+
+**Benefits of Phoneme-Level Training:**
+- More fine-grained speech representation
+- Better handling of pronunciation variations
+- Improved accuracy for lip reading models
+
+**Output:** Creates `.phn` transcript files and `dict.phn.txt` dictionary alongside existing word files.
+
+For detailed phoneme conversion options, see [Phones/README.md](../Phones/README.md).
 
 ---
 
@@ -221,7 +253,8 @@ After running the complete pipeline, your directory structure will look like thi
 ✅ **Path Resolution**: Automatically handles complex LRS3 directory structures  
 ✅ **CSV-Based Workflow**: Step 1 creates CSV files that Step 2 processes  
 ✅ **Flexible Vocabulary**: Automatically adjusts vocab size for dataset size  
-✅ **Multiple Crop Types**: Supports lips (96x96), face (128x128), and full video
+✅ **Multiple Crop Types**: Supports lips (96x96), face (128x128), and full video  
+✅ **Phoneme Support**: Optional phoneme-level transcripts for enhanced training
 
 ---
 
