@@ -15,6 +15,7 @@ import argparse
 import pandas as pd
 from pathlib import Path
 from collections import defaultdict
+import random
 
 def detect_crop_type(data_dir):
     """Detect crop type from directory name suffix"""
@@ -74,12 +75,16 @@ def load_csv_data(labels_dir, crop_suffix):
     print(f"  ✅ Loaded {len(fids)} files total")
     return fids, labels
 
-def create_speaker_splits(fids, labels, split_ratios={'train': 0.7, 'val': 0.15, 'test': 0.15}):
+def create_speaker_splits(fids, labels, split_ratios={'train': 0.7, 'val': 0.15, 'test': 0.15}, seed=42):
     """
     Create train/val/test splits based on speakers for TCD-TIMIT
     This ensures no speaker appears in multiple splits
+    Uses a fixed seed for reproducible splits
     """
     print("🔄 Creating speaker-based splits...")
+    
+    # Set seed for reproducible splits
+    random.seed(seed)
     
     # Group files by speaker
     speaker_files = defaultdict(list)
@@ -95,8 +100,9 @@ def create_speaker_splits(fids, labels, split_ratios={'train': 0.7, 'val': 0.15,
     
     print(f"  📊 Found {len(speaker_files)} unique speakers")
     
-    # Sort speakers for consistent splits
+    # Sort speakers for base consistency, then shuffle with seed for randomization
     speakers = sorted(speaker_files.keys())
+    random.shuffle(speakers)  # This uses the seed set above
     
     # Calculate split indices
     n_speakers = len(speakers)
@@ -140,6 +146,8 @@ def main():
                         help='TCD-TIMIT processed data directory (contains video files)')
     parser.add_argument('--split-ratios', type=str, default='0.7,0.15,0.15',
                         help='Train/val/test split ratios (comma-separated)')
+    parser.add_argument('--seed', type=int, default=42,
+                        help='Random seed for reproducible splits (default: 42)')
     
     args = parser.parse_args()
     
@@ -182,7 +190,7 @@ def main():
         return 1
     
     # Create speaker-based splits
-    train_indices, val_indices, test_indices = create_speaker_splits(fids, labels, split_ratios)
+    train_indices, val_indices, test_indices = create_speaker_splits(fids, labels, split_ratios, args.seed)
     
     # Write file.list and label.list
     file_list_path = tcd_data_dir / 'file.list'
