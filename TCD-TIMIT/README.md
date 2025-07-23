@@ -119,40 +119,8 @@ python preparation/parse_mlf.py --mlf-file /path/to/file.mlf
 
 ## Face Detection Comparison
 
-### OpenCV Haar Cascade (Current Implementation)
-✅ **Pros**: 
-- Fast and lightweight
-- No additional dependencies 
-- Stable across different lighting conditions
-- Good temporal consistency with smoothing
-- Works well with TCD-TIMIT's controlled environment
-
-❌ **Cons**:
-- Less accurate than deep learning methods
-- May struggle with extreme poses/lighting
-
-### MediaPipe (Alternative)
-✅ **Pros**: 
-- More accurate face detection
-- Better landmark detection
-- Good real-time performance
-
-❌ **Cons**:
-- Requires additional pip install
-- More complex integration
-- May have temporal inconsistencies
-
-### RetinaFace (Alternative) 
-✅ **Pros**:
-- State-of-the-art accuracy
-- Excellent for challenging conditions
-
-❌ **Cons**:
-- Requires deep learning models
-- Slower processing
-- Heavy dependencies (PyTorch)
-
-**Recommendation**: For TCD-TIMIT's controlled studio environment, OpenCV Haar Cascade provides the best balance of speed, stability, and accuracy. The temporal smoothing we've implemented addresses most consistency issues.
+### OpenCV Haar Cascade
+For TCD-TIMIT's controlled studio environment, OpenCV Haar Cascade provides the best balance of speed, stability, and accuracy. The temporal smoothing we've implemented addresses most consistency issues.
 
 ## Examples
 
