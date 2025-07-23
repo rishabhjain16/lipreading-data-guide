@@ -19,7 +19,7 @@ def analyze_video_stability(video_path):
     cap = cv2.VideoCapture(str(video_path))
     
     if not cap.isOpened():
-        print(f"❌ Could not open video: {video_path}")
+        print(f"Could not open video: {video_path}")
         return None
     
     prev_frame = None
@@ -70,9 +70,9 @@ def compare_videos(original_dir, processed_dir, output_pattern="*.mp4"):
     original_videos = list(original_path.rglob(output_pattern))
     processed_videos = list(processed_path.rglob(output_pattern))
     
-    print("🔍 Video Stability Analysis")
+    print("Video Stability Analysis")
     print("=" * 60)
-    print("📊 Analyzing frame-to-frame differences (lower = more stable)")
+    print("Analyzing frame-to-frame differences (lower = more stable)")
     print()
     
     for orig_video in original_videos[:5]:  # Test first 5 videos
@@ -83,12 +83,12 @@ def compare_videos(original_dir, processed_dir, output_pattern="*.mp4"):
         processed_candidates = [v for v in processed_videos if v.name == orig_video.name]
         
         if not processed_candidates:
-            print(f"⚠️  No processed version found for {orig_video.name}")
+            print(f"Warning: No processed version found for {orig_video.name}")
             continue
         
         proc_video = processed_candidates[0]
         
-        print(f"📹 Analyzing: {orig_video.name}")
+        print(f"Analyzing: {orig_video.name}")
         
         # Analyze original
         orig_stats = analyze_video_stability(orig_video)
