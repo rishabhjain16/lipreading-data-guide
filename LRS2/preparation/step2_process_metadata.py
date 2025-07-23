@@ -11,15 +11,31 @@ import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
 
+def detect_crop_type(data_dir):
+    """Detect crop type from directory name suffix"""
+    dir_name = os.path.basename(data_dir.rstrip('/'))
+    
+    if dir_name.endswith('_face'):
+        return 'face'
+    elif dir_name.endswith('_full'):
+        return 'full'
+    else:
+        return 'lips'  # default
+
 def get_file_label(lrs2_root, target_dir):
     """Generate file.list and label.list directly in the target directory"""
     print("🔄 Generating file and label lists...")
     
+    # Detect crop type from target directory name
+    crop_type = detect_crop_type(target_dir)
+    crop_suffix = f"_{crop_type}" if crop_type != "lips" else ""
+    print(f"🎥 Detected crop type: {crop_type}")
+    
     video_ids_total, labels_total = [], []
     csv_files = {
-        'train': 'lrs2_train_transcript_lengths_seg16s.csv',
-        'val': 'lrs2_val_transcript_lengths_seg16s.csv',
-        'test': 'lrs2_test_transcript_lengths_seg16s.csv'
+        'train': f'lrs2_train_transcript_lengths_seg16s{crop_suffix}.csv',
+        'val': f'lrs2_val_transcript_lengths_seg16s{crop_suffix}.csv',
+        'test': f'lrs2_test_transcript_lengths_seg16s{crop_suffix}.csv'
     }
 
     for split, csv_file in csv_files.items():

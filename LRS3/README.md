@@ -192,16 +192,22 @@ python step3_metadata_prep.py \
 - ✅ Creates word files (`train.wrd`, `valid.wrd`, `test.wrd`)
 - ✅ Creates dictionary file (`dict.wrd.txt`)
 
-**Note for face/full modes:** If using `--crop-type face` or `--crop-type full`, use the suffixed directories with the step-by-step scripts:
-```bash
-# For face mode
-python step2_generate_file_lists.py --lrs3-data-dir /path/to/lrs3_video_seg16s_face
-python step3_metadata_prep.py --lrs3-data-dir /path/to/lrs3_video_seg16s_face
+**Note for face/full modes:** Steps 2 and 3 now **automatically detect** the crop type from directory names and handle the corresponding CSV files:
 
-# For full mode  
+```bash
+# Automatic crop type detection - works for any crop type
+python step2_generate_file_lists.py --lrs3-data-dir /path/to/lrs3_video_seg16s_face
+python step3_metadata_prep.py --lrs3-data-dir /path/to/lrs3_video_seg16s_face --metadata-dir /path/to/metadata
+
+# Or for full mode  
 python step2_generate_file_lists.py --lrs3-data-dir /path/to/lrs3_video_seg16s_full
-python step3_metadata_prep.py --lrs3-data-dir /path/to/lrs3_video_seg16s_full
+python step3_metadata_prep.py --lrs3-data-dir /path/to/lrs3_video_seg16s_full --metadata-dir /path/to/metadata
 ```
+
+The scripts automatically:
+- 🎥 **Detect crop type** from directory suffix (`_face`, `_full`, or default `lips`)
+- 📄 **Use correct CSV files** (e.g., `lrs3_train_transcript_lengths_seg16s_face.csv`)
+- 📁 **Handle all processing** without manual intervention
 
 ---
 
@@ -211,7 +217,9 @@ After running the complete pipeline, your directory structure will look like thi
 
 ```
 /path/to/processed/lrs3/
-├── lrs3_video_seg16s/              # Step 1 output: Processed videos
+├── lrs3_video_seg16s/              # Step 1 output: Processed videos (lips mode)
+│   │                               # OR: lrs3_video_seg16s_face/ (face mode)  
+│   │                               # OR: lrs3_video_seg16s_full/ (full mode)
 │   ├── trainval/                   # Training videos (speaker_id/video_id.mp4)
 │   ├── test/                       # Test videos  
 │   ├── pretrain/                   # Pretrain videos (if processed)
@@ -224,8 +232,10 @@ After running the complete pipeline, your directory structure will look like thi
 │   ├── test/                       # Test transcripts
 │   └── pretrain/                   # Pretrain transcripts (if processed)
 ├── labels/                         # Step 1 output: CSV metadata files
-│   ├── lrs3_train_transcript_lengths_seg16s.csv
-│   ├── lrs3_val_transcript_lengths_seg16s.csv
+│   ├── lrs3_train_transcript_lengths_seg16s.csv         # (lips mode)
+│   ├── lrs3_train_transcript_lengths_seg16s_face.csv    # (face mode) 
+│   ├── lrs3_train_transcript_lengths_seg16s_full.csv    # (full mode)
+│   ├── lrs3_val_transcript_lengths_seg16s.csv           # (+ val/test variants)
 │   └── lrs3_test_transcript_lengths_seg16s.csv
 └── metadata/                       # Step 3 output: Final training files
     ├── train.tsv                   # Training manifest
@@ -254,6 +264,7 @@ After running the complete pipeline, your directory structure will look like thi
 ✅ **CSV-Based Workflow**: Step 1 creates CSV files that Step 2 processes  
 ✅ **Flexible Vocabulary**: Automatically adjusts vocab size for dataset size  
 ✅ **Multiple Crop Types**: Supports lips (96x96), face (128x128), and full video  
+✅ **Automatic Crop Detection**: Steps 2 & 3 auto-detect crop type from directory names  
 ✅ **Phoneme Support**: Optional phoneme-level transcripts for enhanced training
 
 ---
