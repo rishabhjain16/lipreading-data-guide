@@ -31,7 +31,7 @@ def parse_mlf_file(mlf_file_path):
     Returns:
         dict: {filename: [(start, end, label), ...]}
     """
-    print(f"📄 Parsing MLF file: {mlf_file_path}")
+    print(f"Parsing MLF file: {mlf_file_path}")
     
     transcripts = defaultdict(list)
     current_file = None
@@ -96,7 +96,7 @@ def parse_mlf_file(mlf_file_path):
 
 def analyze_transcripts(transcripts):
     """Analyze the parsed transcripts to understand the data structure"""
-    print("\n📊 Analyzing transcripts...")
+    print("\nAnalyzing transcripts...")
     
     total_files = len(transcripts)
     total_segments = sum(len(segments) for segments in transcripts.values())
@@ -210,13 +210,11 @@ def main():
     args = parser.parse_args()
     
     if not Path(args.mlf_file).exists():
-        print(f"❌ Error: MLF file not found: {args.mlf_file}")
+        print(f"Error: MLF file not found: {args.mlf_file}")
         return 1
-    
-    print("🚀 TCD-TIMIT MLF Parser")
-    print("-" * 40)
-    
-    # Parse MLF file
+        
+    print("TCD-TIMIT MLF Parser")
+    print("-" * 40)    # Parse MLF file
     transcripts = parse_mlf_file(args.mlf_file)
     
     if not transcripts:

@@ -35,62 +35,10 @@ import subprocess
 warnings.filterwarnings("ignore")
 
 # TCD-TIMIT sentence mapping (TIMIT corpus standard sentences)
-# Only include known sentences, for others we'll use phoneme-to-word approximation
-TIMIT_SENTENCES = {
-    'sa1': "She had your dark suit in greasy wash water all year.",
-    'sa2': "Don't ask me to carry an oily rag like that.",
-    # Add more as needed - most will be auto-generated
-}
+import json
 
-def phonemes_to_approximate_words(phonemes):
-    """
-    Convert phonemes to approximate words using simple mapping
-    This is a basic approximation for readability
-    """
-    # Simple phoneme to word mapping for common patterns
-    phoneme_words = {
-        'sh iy': 'she',
-        'hh ae d': 'had',
-        'y uh r': 'your',
-        'd aa r k': 'dark',
-        's uw t': 'suit',
-        'ih n': 'in',
-        'g r iy s iy': 'greasy',
-        'w aa sh': 'wash',
-        'w aa t er': 'water',
-        'aa l': 'all',
-        'y ih r': 'year',
-        'dh ax': 'the',
-        'ax n d': 'and',
-        'w ih th': 'with',
-        'f ao r': 'for',
-        'th ax t': 'that',
-        # Add more mappings as needed
-    }
-    
-    # Try to match patterns, otherwise return cleaned phonemes
-    words = []
-    phoneme_list = phonemes.split()
-    i = 0
-    
-    while i < len(phoneme_list):
-        found_match = False
-        # Try longer patterns first
-        for length in range(min(4, len(phoneme_list) - i), 0, -1):
-            pattern = ' '.join(phoneme_list[i:i+length])
-            if pattern in phoneme_words:
-                words.append(phoneme_words[pattern])
-                i += length
-                found_match = True
-                break
-        
-        if not found_match:
-            # Skip single phonemes that don't map to words (like silence markers)
-            if phoneme_list[i] not in ['sil', 'sp', 'h#']:
-                words.append(f"[{phoneme_list[i]}]")
-            i += 1
-    
-    return ' '.join(words) if words else phonemes
+with open("./timit_sentences.json", "r", encoding="utf-8") as f:
+    TIMIT_SENTENCES = json.load(f)
 
 def parse_mlf_transcripts(mlf_file_path):
     """Parse .mlf file to extract transcript mappings"""
@@ -609,15 +557,23 @@ def extract_file_info(video_path, subset_dir):
     """Extract speaker ID and transcript ID from video path"""
     rel_path = video_path.relative_to(subset_dir)
     parts = rel_path.parts
-    
-    if len(parts) >= 2:
-        speaker_id = parts[0]  # First directory is speaker
-        video_name = parts[-1]  # Last part is video filename
-        # Extract transcript ID (remove extension)
+    # Expecting: speaker/Clips/camera_view/filename
+    if len(parts) >= 4:
+        speaker_id = parts[0]
+        session = parts[1]  # e.g., 'Clips'
+        camera_view = parts[2]  # e.g., '30degcam', 'frontalcam'
+        video_name = parts[-1]
         transcript_id = video_name.split('.')[0]
-        return speaker_id, transcript_id
-    
-    return None, None
+        return speaker_id, session, camera_view, transcript_id
+    elif len(parts) >= 2:
+        # Fallback: just speaker and filename
+        speaker_id = parts[0]
+        session = None
+        camera_view = None
+        video_name = parts[-1]
+        transcript_id = video_name.split('.')[0]
+        return speaker_id, session, camera_view, transcript_id
+    return None, None, None, None
 
 def main():
     parser = argparse.ArgumentParser(description="TCD-TIMIT Preprocessing Pipeline (HD-Optimized)")
@@ -690,18 +646,19 @@ def main():
     if args.max_videos:
         video_files = video_files[:args.max_videos]
     
-    # Group by speaker
+    # Group by (speaker, session, camera_view)
     speaker_videos = {}
     subset_dir = data_path / args.subset
-    
+
     for video_path in video_files:
-        speaker_id, transcript_id = extract_file_info(video_path, subset_dir)
+        speaker_id, session, camera_view, transcript_id = extract_file_info(video_path, subset_dir)
         if speaker_id and transcript_id:
-            if speaker_id not in speaker_videos:
-                speaker_videos[speaker_id] = []
-            speaker_videos[speaker_id].append((video_path, transcript_id))
-    
-    print(f"� Found {len(video_files)} videos, {len(speaker_videos)} speakers")
+            key = (speaker_id, session, camera_view)
+            if key not in speaker_videos:
+                speaker_videos[key] = []
+            speaker_videos[key].append((video_path, transcript_id))
+
+    print(f"� Found {len(video_files)} videos, {len(speaker_videos)} (speaker, session, camera_view) groups")
     
     # Estimate processing time and storage
     sample_size_mb = 38.7  # From our analysis
@@ -716,34 +673,42 @@ def main():
     processed_count = 0
     skipped_count = 0
     
-    for speaker_id in tqdm(speaker_videos.keys(), desc="Processing speakers"):
-        videos = speaker_videos[speaker_id]
-        
-        # Create speaker directories
-        speaker_vid_dir = os.path.join(dst_vid_dir, args.subset, speaker_id)
-        speaker_txt_dir = os.path.join(dst_txt_dir, args.subset, speaker_id)
-        speaker_aud_dir = os.path.join(dst_aud_dir, args.subset, speaker_id)
+    for (speaker_id, session, camera_view) in tqdm(speaker_videos.keys(), desc="Processing speakers/sessions/views"):
+        videos = speaker_videos[(speaker_id, session, camera_view)]
+
+        # Create output directories including session and camera_view
+        if session and camera_view:
+            speaker_vid_dir = os.path.join(dst_vid_dir, args.subset, speaker_id, session, camera_view)
+            speaker_txt_dir = os.path.join(dst_txt_dir, args.subset, speaker_id, session, camera_view)
+            speaker_aud_dir = os.path.join(dst_aud_dir, args.subset, speaker_id, session, camera_view)
+        else:
+            speaker_vid_dir = os.path.join(dst_vid_dir, args.subset, speaker_id)
+            speaker_txt_dir = os.path.join(dst_txt_dir, args.subset, speaker_id)
+            speaker_aud_dir = os.path.join(dst_aud_dir, args.subset, speaker_id)
         os.makedirs(speaker_vid_dir, exist_ok=True)
         os.makedirs(speaker_txt_dir, exist_ok=True)
         os.makedirs(speaker_aud_dir, exist_ok=True)
-        
-        for video_path, transcript_id in tqdm(videos, desc=f"  {speaker_id}", leave=False):
+
+        for video_path, transcript_id in tqdm(videos, desc=f"  {speaker_id}/{session}/{camera_view}", leave=False):
             # Check if transcript exists
             if transcript_id not in all_transcripts:
                 skipped_count += 1
                 continue
-            
+
             transcript = all_transcripts[transcript_id]
-            
-            # Create unique file ID: speaker_transcript (e.g., 01M_sa1)
-            unique_id = f"{speaker_id}_{transcript_id}"
-            
+
+            # Create unique file ID: speaker_session_camera_transcript (e.g., 01M_Clips_30degcam_sa1)
+            if session and camera_view:
+                unique_id = f"{speaker_id}_{session}_{camera_view}_{transcript_id}"
+            else:
+                unique_id = f"{speaker_id}_{transcript_id}"
+
             # Output paths with unique naming - put audio in same dir as video for easier processing
             output_video = os.path.join(speaker_vid_dir, f"{unique_id}.mp4")
             output_phn = os.path.join(speaker_txt_dir, f"{unique_id}.phn")    # Phonemes
             output_txt = os.path.join(speaker_txt_dir, f"{unique_id}.txt")    # Sentence
             output_audio = os.path.join(speaker_vid_dir, f"{unique_id}.wav")  # Same dir as video
-            
+
             try:
                 # Process video with optimized pipeline
                 success = process_video_optimized(video_path, output_video, args.crop_type, args.output_size)
@@ -751,33 +716,36 @@ def main():
                     print(f"⚠️  Warning: Failed to process {video_path}")
                     skipped_count += 1
                     continue
-                
+
                 # Extract audio
                 extract_audio(video_path, output_audio)
-                
+
                 # Save phonemes (.phn file)
                 with open(output_phn, 'w') as f:
                     f.write(transcript)  # This is the phoneme sequence
-                
+
                 # Save sentence (.txt file) if we have a mapping
                 sentence = TIMIT_SENTENCES.get(transcript_id, transcript)  # Fallback to phonemes if no sentence mapping
                 with open(output_txt, 'w') as f:
                     f.write(sentence)
-                
+
                 # Add to CSV data
-                rel_video_path = f"{dataset}_video_seg{seg_duration}s{crop_suffix}{size_suffix}/{args.subset}/{speaker_id}/{unique_id}.mp4"
+                if session and camera_view:
+                    rel_video_path = f"{dataset}_video_seg{seg_duration}s{crop_suffix}{size_suffix}/{args.subset}/{speaker_id}/{session}/{camera_view}/{unique_id}.mp4"
+                else:
+                    rel_video_path = f"{dataset}_video_seg{seg_duration}s{crop_suffix}{size_suffix}/{args.subset}/{speaker_id}/{unique_id}.mp4"
                 csv_data.append([
                     speaker_id,
                     rel_video_path,
-                    transcript,
-                    len(transcript.split()),  # word count
+                    sentence,
+                    len(sentence.split()),  # word count
                     unique_id,  # Use unique ID instead of transcript_id
                     f"{args.output_size}x{args.output_size}",  # resolution
                     args.crop_type
                 ])
-                
+
                 processed_count += 1
-                
+
             except Exception as e:
                 print(f"❌ Error processing {video_path}: {e}")
                 skipped_count += 1

@@ -30,7 +30,7 @@ def detect_crop_type(data_dir):
 
 def load_csv_data(labels_dir, crop_suffix):
     """Load data from CSV files created by Step 1"""
-    print("📊 Loading data from CSV files...")
+    print("Loading data from CSV files...")
     
     fids, labels = [], []
     
@@ -53,7 +53,7 @@ def load_csv_data(labels_dir, crop_suffix):
         if not csv_path.exists():
             continue
         
-        print(f"  📝 Processing: {csv_file}")
+        print(f"  Processing: {csv_file}")
         df = pd.read_csv(csv_path)
         
         for _, row in df.iterrows():
@@ -72,7 +72,7 @@ def load_csv_data(labels_dir, crop_suffix):
                 fids.append(file_id)
                 labels.append(transcript)
     
-    print(f"  ✅ Loaded {len(fids)} files total")
+    print(f"  Loaded {len(fids)} files total")
     return fids, labels
 
 def create_speaker_splits(fids, labels, split_ratios={'train': 0.7, 'val': 0.15, 'test': 0.15}, seed=42):
@@ -81,7 +81,7 @@ def create_speaker_splits(fids, labels, split_ratios={'train': 0.7, 'val': 0.15,
     This ensures no speaker appears in multiple splits
     Uses a fixed seed for reproducible splits
     """
-    print("🔄 Creating speaker-based splits...")
+    print("Creating speaker-based splits...")
     
     # Set seed for reproducible splits
     random.seed(seed)
@@ -98,7 +98,7 @@ def create_speaker_splits(fids, labels, split_ratios={'train': 0.7, 'val': 0.15,
             speaker_key = f"{subset}_{speaker_id}"
             speaker_files[speaker_key].append(i)
     
-    print(f"  📊 Found {len(speaker_files)} unique speakers")
+    print(f"  Found {len(speaker_files)} unique speakers")
     
     # Sort speakers for base consistency, then shuffle with seed for randomization
     speakers = sorted(speaker_files.keys())
@@ -113,10 +113,10 @@ def create_speaker_splits(fids, labels, split_ratios={'train': 0.7, 'val': 0.15,
     val_speakers = speakers[train_end:val_end]
     test_speakers = speakers[val_end:]
     
-    print(f"  📊 Speaker split:")
-    print(f"    • Train: {len(train_speakers)} speakers")
-    print(f"    • Val: {len(val_speakers)} speakers")
-    print(f"    • Test: {len(test_speakers)} speakers")
+    print(f"  Speaker split:")
+    print(f"    Train: {len(train_speakers)} speakers")
+    print(f"    Val: {len(val_speakers)} speakers")
+    print(f"    Test: {len(test_speakers)} speakers")
     
     # Create file indices for each split
     train_indices = []
@@ -130,10 +130,10 @@ def create_speaker_splits(fids, labels, split_ratios={'train': 0.7, 'val': 0.15,
     for speaker in test_speakers:
         test_indices.extend(speaker_files[speaker])
     
-    print(f"  📊 File split:")
-    print(f"    • Train: {len(train_indices)} files")
-    print(f"    • Val: {len(val_indices)} files")
-    print(f"    • Test: {len(test_indices)} files")
+    print(f"  File split:")
+    print(f"    Train: {len(train_indices)} files")
+    print(f"    Val: {len(val_indices)} files")
+    print(f"    Test: {len(test_indices)} files")
     
     return train_indices, val_indices, test_indices
 
@@ -154,7 +154,7 @@ def main():
     # Parse split ratios
     ratios = [float(x) for x in args.split_ratios.split(',')]
     if len(ratios) != 3 or abs(sum(ratios) - 1.0) > 0.001:
-        print("❌ Error: Split ratios must be three numbers that sum to 1.0")
+        print("Error: Split ratios must be three numbers that sum to 1.0")
         return 1
     
     split_ratios = {'train': ratios[0], 'val': ratios[1], 'test': ratios[2]}
@@ -162,7 +162,7 @@ def main():
     # Validate input directory
     tcd_data_dir = Path(args.tcd_data_dir).resolve()
     if not tcd_data_dir.exists():
-        print(f"❌ Error: TCD-TIMIT data directory not found: {tcd_data_dir}")
+        print(f"Error: TCD-TIMIT data directory not found: {tcd_data_dir}")
         return 1
     
     # Detect crop type and setup paths
@@ -172,21 +172,21 @@ def main():
     # Find labels directory
     labels_dir = tcd_data_dir.parent / "labels"
     if not labels_dir.exists():
-        print(f"❌ Error: Labels directory not found: {labels_dir}")
-        print("💡 Make sure you've run step1_prepare_tcd_timit.py first")
+        print(f"Error: Labels directory not found: {labels_dir}")
+        print("Make sure you've run step1_prepare_tcd_timit.py first")
         return 1
     
-    print(f"📁 Data directory: {tcd_data_dir}")
-    print(f"📁 Labels directory: {labels_dir}")
-    print(f"🎥 Detected crop type: {crop_type}")
-    print(f"📊 Split ratios: Train={split_ratios['train']:.1%}, Val={split_ratios['val']:.1%}, Test={split_ratios['test']:.1%}")
+    print(f"Data directory: {tcd_data_dir}")
+    print(f"Labels directory: {labels_dir}")
+    print(f"Detected crop type: {crop_type}")
+    print(f"Split ratios: Train={split_ratios['train']:.1%}, Val={split_ratios['val']:.1%}, Test={split_ratios['test']:.1%}")
     print("-" * 60)
     
     # Load data from CSV files
     fids, labels = load_csv_data(labels_dir, crop_suffix)
     
     if not fids:
-        print("❌ Error: No data loaded from CSV files")
+        print("Error: No data loaded from CSV files")
         return 1
     
     # Create speaker-based splits
@@ -196,7 +196,7 @@ def main():
     file_list_path = tcd_data_dir / 'file.list'
     label_list_path = tcd_data_dir / 'label.list'
     
-    print("📝 Writing file lists...")
+    print("Writing file lists...")
     
     with open(file_list_path, 'w') as f:
         for fid in fids:
@@ -222,17 +222,17 @@ def main():
                 # Get just the transcript_id part for split files
                 transcript_id = fid.split('/')[-1]  # Last part after final /
                 f.write(f"{transcript_id}\n")
-        print(f"  ✅ Created {split_file_path} with {len(indices)} entries")
+        print(f"  Created {split_file_path} with {len(indices)} entries")
     
-    print(f"✅ Created file.list with {len(fids)} entries: {file_list_path}")
-    print(f"✅ Created label.list with {len(labels)} entries: {label_list_path}")
+    print(f"Created file.list with {len(fids)} entries: {file_list_path}")
+    print(f"Created label.list with {len(labels)} entries: {label_list_path}")
     
-    print("\n🎉 TCD-TIMIT file list generation completed!")
-    print(f"📊 Dataset summary:")
-    print(f"   • Total files: {len(fids)}")
-    print(f"   • Train: {len(train_indices)} files")
-    print(f"   • Val: {len(val_indices)} files")  
-    print(f"   • Test: {len(test_indices)} files")
+    print("TCD-TIMIT file list generation completed!")
+    print(f"Dataset summary:")
+    print(f"   Total files: {len(fids)}")
+    print(f"   Train: {len(train_indices)} files")
+    print(f"   Val: {len(val_indices)} files")  
+    print(f"   Test: {len(test_indices)} files")
     
     return 0
 
