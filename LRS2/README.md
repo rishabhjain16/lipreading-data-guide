@@ -120,16 +120,22 @@ python step3_metadata_prep.py \
 - ✅ Creates dictionary file (`dict.wrd.txt`)
 
 
-**Note for face/full modes:** If using `--crop-type face` or `--crop-type full`, use the suffixed directories with the step-by-step scripts:
-```bash
-# For face mode
-python step2_process_metadata.py --target-dir /path/to/lrs2_video_seg16s_face
-python step3_metadata_prep.py --lrs2-data-dir /path/to/lrs2_video_seg16s_face
+**Note for face/full modes:** Steps 2 and 3 now **automatically detect** the crop type from directory names and handle the corresponding CSV files:
 
-# For full mode  
+```bash
+# Automatic crop type detection - works for any crop type
+python step2_process_metadata.py --target-dir /path/to/lrs2_video_seg16s_face
+python step3_metadata_prep.py --lrs2-data-dir /path/to/lrs2_video_seg16s_face --metadata-dir /path/to/metadata
+
+# Or for full mode  
 python step2_process_metadata.py --target-dir /path/to/lrs2_video_seg16s_full
-python step3_metadata_prep.py --lrs2-data-dir /path/to/lrs2_video_seg16s_full
+python step3_metadata_prep.py --lrs2-data-dir /path/to/lrs2_video_seg16s_full --metadata-dir /path/to/metadata
 ```
+
+The scripts automatically:
+- 🎥 **Detect crop type** from directory suffix (`_face`, `_full`, or default `lips`)
+- 📄 **Use correct CSV files** (e.g., `lrs2_train_transcript_lengths_seg16s_face.csv`)
+- 📁 **Handle all processing** without manual intervention
 
 ---
 
