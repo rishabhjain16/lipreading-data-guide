@@ -1,10 +1,7 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
-lightning_logs/
-outputs/
 *.py[cod]
 *$py.class
-.idea/
 *.pyc
 *.tar
 .DS_Store
