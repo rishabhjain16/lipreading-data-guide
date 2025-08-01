@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-TCD-TIMIT Dataset Preprocessing Pipeline (HD-Optimized)
-=======================================================
+TCD-TIMIT Dataset Preprocessing Pipeline (HD-Optimized with MediaPipe)
+======================================================================
 
 An optimized preprocessing script for TCD-TIMIT dataset that:
-1. Leverages HD quality (1920x1080) for superior face detection
+1. Leverages HD quality (1920x1080) for superior face detection using MediaPipe
 2. Outputs training-friendly resolutions (96x96 lips, 224x224 face)
 3. Balances quality with computational efficiency
 
 Key Features:
-- HD-quality face detection for precise lip region extraction
+- HD-quality face and landmark detection for precise lip region extraction using MediaPipe
 - Configurable output resolutions optimized for training
 - Efficient processing pipeline
 - Compatible with existing LRS2/LRS3 model architectures
@@ -21,6 +21,8 @@ Usage:
         --subset volunteers \
         --crop-type lips \
         --output-size 96
+
+Note: Requires MediaPipe library. Install with: pip install mediapipe
 """
 
 import argparse
@@ -32,10 +34,8 @@ from pathlib import Path
 from tqdm import tqdm
 import warnings
 import subprocess
+import mediapipe as mp
 warnings.filterwarnings("ignore")
-
-# Import data module for detector support
-from data.data_module import AVSRDataLoader
 
 # TCD-TIMIT sentence mapping (TIMIT corpus standard sentences)
 import json
@@ -93,93 +93,70 @@ def parse_mlf_transcripts(mlf_file_path):
     
     return transcripts
 
-def detect_face_region(frame):
+def detect_face_landmarks(frame, face_mesh):
     """
-    Detect face region using OpenCV's Haar Cascade (lightweight)
-    Returns (x, y, w, h) of detected face or None
+    Detect face landmarks using MediaPipe FaceMesh
+    Returns list of landmarks if detected, else None
     """
-    # Convert to grayscale for face detection
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # Convert to RGB as MediaPipe requires RGB input
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     
-    # Load face cascade (built into OpenCV)
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    # Process the frame
+    results = face_mesh.process(rgb_frame)
     
-    # Detect faces with improved parameters for tight cropping
-    faces = face_cascade.detectMultiScale(
-        gray, 
-        scaleFactor=1.1,    # More precise detection
-        minNeighbors=6,     # Stricter detection
-        minSize=(50, 50),   # Minimum face size
-        flags=cv2.CASCADE_SCALE_IMAGE
-    )
-    
-    if len(faces) > 0:
-        # Return the largest face
-        largest_face = max(faces, key=lambda x: x[2] * x[3])
-        return largest_face
-    
+    if results.multi_face_landmarks:
+        # Return the first detected face's landmarks
+        return results.multi_face_landmarks[0].landmark
     return None
 
-def smart_crop_hd_video(frame, crop_type="lips", output_size=96):
+def get_bounding_box_from_landmarks(landmarks, frame_shape, crop_type="lips"):
     """
-    Intelligently crop HD video using face detection
-    Takes advantage of 1920x1080 resolution for better detection
-    Outputs training-friendly resolution
+    Calculate bounding box from landmarks
+    Returns (x, y, w, h)
     """
-    h, w = frame.shape[:2]
+    h, w = frame_shape[:2]
     
-    # Try face detection first
-    face_region = detect_face_region(frame)
+    # Extract x, y coordinates (normalized)
+    x_coords = [lm.x * w for lm in landmarks]
+    y_coords = [lm.y * h for lm in landmarks]
     
-    if face_region is not None:
-        x, y, fw, fh = face_region
+    if crop_type == "lips":
+        # Mouth landmarks indices (simplified subset for mouth bounding box)
+        mouth_indices = [0, 13, 14, 17, 37, 39, 40, 61, 78, 84, 91, 146, 181, 185, 267, 269, 270, 291, 314, 321, 375, 405, 409]
+        mouth_x = [x_coords[i] for i in mouth_indices if i < len(x_coords)]
+        mouth_y = [y_coords[i] for i in mouth_indices if i < len(y_coords)]
         
-        if crop_type == "lips":
-            # Extract lip region from detected face (bottom 40% of face)
-            lip_y = y + int(fh * 0.6)  # Start from 60% down the face
-            lip_h = int(fh * 0.4)      # Take bottom 40% of face height
-            lip_x = x + int(fw * 0.2)  # Center horizontally with some margin
-            lip_w = int(fw * 0.6)      # Take center 60% of face width
-            
-            # Ensure coordinates are within frame
-            lip_x = max(0, min(lip_x, w))
-            lip_y = max(0, min(lip_y, h))
-            lip_w = min(lip_w, w - lip_x)
-            lip_h = min(lip_h, h - lip_y)
-            
-            if lip_w > 0 and lip_h > 0:
-                cropped = frame[lip_y:lip_y+lip_h, lip_x:lip_x+lip_w]
-            else:
-                # Fallback to center crop
-                cropped = center_crop_fallback(frame, crop_type, output_size)
-                
-        elif crop_type == "face":
-            # Use detected face region with some padding
-            padding = int(max(fw, fh) * 0.3)  # 30% padding
-            face_x = max(0, x - padding)
-            face_y = max(0, y - padding)
-            face_w = min(w - face_x, fw + 2*padding)
-            face_h = min(h - face_y, fh + 2*padding)
-            
-            cropped = frame[face_y:face_y+face_h, face_x:face_x+face_w]
-            
-        else:  # full
-            cropped = frame
-    else:
-        # Fallback to center crop if no face detected
-        cropped = center_crop_fallback(frame, crop_type, output_size)
+        min_x, max_x = min(mouth_x), max(mouth_x)
+        min_y, max_y = min(mouth_y), max(mouth_y)
+        
+        # Add padding for lips
+        padding_x = (max_x - min_x) * 0.3
+        padding_y = (max_y - min_y) * 0.3
+        
+        x = max(0, int(min_x - padding_x))
+        y = max(0, int(min_y - padding_y))
+        box_w = min(w - x, int(max_x - min_x + 2 * padding_x))
+        box_h = min(h - y, int(max_y - min_y + 2 * padding_y))
+        
+    elif crop_type == "face":
+        # Full face bounding box from all landmarks
+        min_x, max_x = min(x_coords), max(x_coords)
+        min_y, max_y = min(y_coords), max(y_coords)
+        
+        # Add minimal padding
+        padding = max((max_x - min_x), (max_y - min_y)) * 0.1
+        x = max(0, int(min_x - padding))
+        y = max(0, int(min_y - padding))
+        box_w = min(w - x, int(max_x - min_x + 2 * padding))
+        box_h = min(h - y, int(max_y - min_y + 2 * padding))
+        
+    else:  # full
+        return (0, 0, w, h)
     
-    # Resize to target output size
-    if cropped.size > 0:
-        target_size = (output_size, output_size)
-        resized = cv2.resize(cropped, target_size, interpolation=cv2.INTER_LANCZOS4)
-        return resized
-    else:
-        # Final fallback
-        return center_crop_fallback(frame, crop_type, output_size)
+    return (x, y, box_w, box_h)
 
 def center_crop_fallback(frame, crop_type="lips", output_size=96):
-    """Fallback center crop when face detection fails"""
+    """Fallback center crop when detection fails"""
     h, w = frame.shape[:2]
     
     if crop_type == "lips":
@@ -209,79 +186,43 @@ def center_crop_fallback(frame, crop_type="lips", output_size=96):
         # Final fallback - just resize original
         return cv2.resize(frame, (output_size, output_size), interpolation=cv2.INTER_LANCZOS4)
 
-def calculate_stable_crop_region(face_regions, frame_shape, crop_type="lips", output_size=96):
+def calculate_stable_crop_region(all_landmarks, frame_shape, crop_type="lips", output_size=96):
     """
-    Calculate a stable crop region based on all face detections in the video
+    Calculate a stable crop region based on all landmark detections in the video
     This prevents jitter by using a consistent crop area for all frames
     """
     h, w = frame_shape[:2]
     
-    # Filter out None detections and collect valid face regions
-    valid_faces = [face for face in face_regions if face is not None]
+    # Filter valid landmarks
+    valid_landmarks = [lm for lm in all_landmarks if lm is not None]
     
-    if not valid_faces:
-        # No faces detected, use center crop fallback
-        if crop_type == "lips":
-            center_x, center_y = w // 2, int(h * 0.75)
-        elif crop_type == "face":
-            center_x, center_y = w // 2, h // 2
-        else:  # full - now uses face-like fallback
-            center_x, center_y = w // 2, h // 2
-        
-        crop_size = output_size * 4  # Larger crop area, will be resized
-        x1 = max(0, center_x - crop_size // 2)
-        y1 = max(0, center_y - crop_size // 2)
-        x2 = min(w, x1 + crop_size)
-        y2 = min(h, y1 + crop_size)
-        return (x1, y1, x2 - x1, y2 - y1)
+    if not valid_landmarks:
+        # Fallback
+        return get_fallback_crop(frame_shape, crop_type, output_size)
     
-    # Calculate median/average face region for stability
-    x_coords = [face[0] for face in valid_faces]
-    y_coords = [face[1] for face in valid_faces]
-    w_coords = [face[2] for face in valid_faces]
-    h_coords = [face[3] for face in valid_faces]
+    # Collect bounding boxes from all valid landmarks
+    all_boxes = [get_bounding_box_from_landmarks(lm, frame_shape, crop_type) for lm in valid_landmarks]
     
-    # Use median for more robust estimation
+    # Calculate median box
+    x_coords = [box[0] for box in all_boxes]
+    y_coords = [box[1] for box in all_boxes]
+    w_coords = [box[2] for box in all_boxes]
+    h_coords = [box[3] for box in all_boxes]
+    
     median_x = int(np.median(x_coords))
     median_y = int(np.median(y_coords))
     median_w = int(np.median(w_coords))
     median_h = int(np.median(h_coords))
     
-    # Calculate stable crop region based on median face
-    if crop_type == "lips":
-        # Extract lip region from median face (bottom 40% of face)
-        lip_y = median_y + int(median_h * 0.6)
-        lip_h = int(median_h * 0.5)  # Slightly larger for stability
-        lip_x = median_x + int(median_w * 0.15)  # Center with margin
-        lip_w = int(median_w * 0.7)  # Wider for stability
-        
-        # Ensure coordinates are within frame
-        lip_x = max(0, min(lip_x, w))
-        lip_y = max(0, min(lip_y, h))
-        lip_w = min(lip_w, w - lip_x)
-        lip_h = min(lip_h, h - lip_y)
-        
-        return (lip_x, lip_y, lip_w, lip_h)
-        
-    elif crop_type == "face":
-        # Use just the detected face region with minimal padding
-        padding = int(max(median_w, median_h) * 0.05)  # Very minimal padding for tight face crop
-        face_x = max(0, median_x - padding)
-        face_y = max(0, median_y - padding)
-        face_w = min(w - face_x, median_w + 2*padding)
-        face_h = min(h - face_y, median_h + 2*padding)
-        
-        return (face_x, face_y, face_w, face_h)
+    # Adjust for stability
+    if crop_type == "lips" or crop_type == "face":
+        padding = int(max(median_w, median_h) * 0.05)
+        median_x = max(0, median_x - padding)
+        median_y = max(0, median_y - padding)
+        median_w = min(w - median_x, median_w + 2 * padding)
+        median_h = min(h - median_y, median_h + 2 * padding)
     
-    else:  # full - now uses larger area around face
-        # Use median face with substantial padding to cover more area
-        padding = int(max(median_w, median_h) * 0.4)  # Larger padding for more coverage
-        face_x = max(0, median_x - padding)
-        face_y = max(0, median_y - padding)
-        face_w = min(w - face_x, median_w + 2*padding)
-        face_h = min(h - face_y, median_h + 2*padding)
-        
-        return (face_x, face_y, face_w, face_h)
+    return (median_x, median_y, median_w, median_h)
 
 def apply_stable_crop(frame, crop_region, output_size):
     """
@@ -293,7 +234,7 @@ def apply_stable_crop(frame, crop_region, output_size):
     cropped = frame[y:y+h, x:x+w]
     
     if cropped.size == 0:
-        # Fallback to full frame if crop failed
+        # Fallback to full frame
         cropped = frame
     
     # Resize to target output size
@@ -304,7 +245,7 @@ def apply_stable_crop(frame, crop_region, output_size):
 
 def process_video_optimized(input_path, output_path, crop_type="lips", output_size=96):
     """
-    Process HD video with stable cropping to avoid jitter
+    Process HD video with stable cropping to avoid jitter using MediaPipe
     Uses temporal smoothing and fallback strategies
     """
     cap = cv2.VideoCapture(str(input_path))
@@ -317,23 +258,39 @@ def process_video_optimized(input_path, output_path, crop_type="lips", output_si
         cap.release()
         return False
     
+    # Initialize MediaPipe FaceMesh
+    mp_face_mesh = mp.solutions.face_mesh
+    face_mesh = mp_face_mesh.FaceMesh(
+        static_image_mode=False,
+        max_num_faces=1,
+        refine_landmarks=True,
+        min_detection_confidence=0.5,
+        min_tracking_confidence=0.5
+    )
+    
     # Strategy 1: Try stable cropping for short videos
     if frame_count < 200:  # For short videos, use stable crop
         try:
-            return process_with_stable_crop(cap, output_path, crop_type, output_size, fps)
+            success = process_with_stable_crop(cap, output_path, crop_type, output_size, fps, face_mesh)
+            face_mesh.close()
+            return success
         except Exception:
             # Fallback to simple method
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to beginning
-            return process_with_simple_crop(cap, output_path, crop_type, output_size, fps)
+            success = process_with_simple_crop(cap, output_path, crop_type, output_size, fps, face_mesh)
+            face_mesh.close()
+            return success
     else:
         # For longer videos, use simple method to avoid memory issues
-        return process_with_simple_crop(cap, output_path, crop_type, output_size, fps)
+        success = process_with_simple_crop(cap, output_path, crop_type, output_size, fps, face_mesh)
+        face_mesh.close()
+        return success
 
-def process_with_stable_crop(cap, output_path, crop_type, output_size, fps):
-    """Process video with stable cropping (memory intensive but smooth)"""
-    # First pass: collect frames and face regions
+def process_with_stable_crop(cap, output_path, crop_type, output_size, fps, face_mesh):
+    """Process video with stable cropping (memory intensive but smooth) using MediaPipe"""
+    # First pass: collect frames and landmarks
     all_frames = []
-    face_regions = []
+    all_landmarks = []
     
     while True:
         ret, frame = cap.read()
@@ -341,9 +298,9 @@ def process_with_stable_crop(cap, output_path, crop_type, output_size, fps):
             break
         all_frames.append(frame)
         
-        # Detect face for this frame
-        face_region = detect_face_region(frame)
-        face_regions.append(face_region)
+        # Detect landmarks for this frame
+        landmarks = detect_face_landmarks(frame, face_mesh)
+        all_landmarks.append(landmarks)
     
     cap.release()
     
@@ -351,7 +308,7 @@ def process_with_stable_crop(cap, output_path, crop_type, output_size, fps):
         return False
     
     # Calculate stable crop region
-    stable_crop_region = calculate_stable_crop_region(face_regions, all_frames[0].shape, crop_type, output_size)
+    stable_crop_region = calculate_stable_crop_region(all_landmarks, all_frames[0].shape, crop_type, output_size)
     
     # Apply stable cropping to all frames
     processed_frames = []
@@ -362,8 +319,8 @@ def process_with_stable_crop(cap, output_path, crop_type, output_size, fps):
     # Save video
     return save_processed_video(processed_frames, output_path, fps, output_size)
 
-def process_with_simple_crop(cap, output_path, crop_type, output_size, fps):
-    """Process video with enhanced temporal smoothing (memory efficient)"""
+def process_with_simple_crop(cap, output_path, crop_type, output_size, fps, face_mesh):
+    """Process video with enhanced temporal smoothing (memory efficient) using MediaPipe"""
     processed_frames = []
     prev_crop_region = None
     smoothing_factor = 0.8  # Increased from 0.7 for more stability
@@ -377,12 +334,12 @@ def process_with_simple_crop(cap, output_path, crop_type, output_size, fps):
         if not ret:
             break
         
-        # Detect face region for current frame
-        current_face = detect_face_region(frame)
+        # Detect landmarks for current frame
+        landmarks = detect_face_landmarks(frame, face_mesh)
         
-        if current_face is not None:
+        if landmarks:
             # Calculate crop region for this frame
-            current_crop = calculate_crop_from_face(current_face, frame.shape, crop_type)
+            current_crop = get_bounding_box_from_landmarks(landmarks, frame.shape, crop_type)
             
             # Add to history buffer
             crop_history.append(current_crop)
@@ -401,7 +358,7 @@ def process_with_simple_crop(cap, output_path, crop_type, output_size, fps):
             
             prev_crop_region = smoothed_crop
         else:
-            # No face detected, use previous region or fallback
+            # No landmarks detected, use previous region or fallback
             if prev_crop_region is not None:
                 smoothed_crop = prev_crop_region
             else:
@@ -421,37 +378,6 @@ def process_with_simple_crop(cap, output_path, crop_type, output_size, fps):
     # Save video
     return save_processed_video(processed_frames, output_path, fps, output_size)
 
-def calculate_crop_from_face(face_region, frame_shape, crop_type):
-    """Calculate crop region from a single face detection"""
-    x, y, w, h = face_region
-    frame_h, frame_w = frame_shape[:2]
-    
-    if crop_type == "lips":
-        lip_y = y + int(h * 0.6)
-        lip_h = int(h * 0.4)
-        lip_x = x + int(w * 0.2)
-        lip_w = int(w * 0.6)
-        
-        # Clamp to frame boundaries
-        lip_x = max(0, min(lip_x, frame_w))
-        lip_y = max(0, min(lip_y, frame_h))
-        lip_w = min(lip_w, frame_w - lip_x)
-        lip_h = min(lip_h, frame_h - lip_y)
-        
-        return (lip_x, lip_y, lip_w, lip_h)
-    
-    elif crop_type == "face":
-        padding = int(max(w, h) * 0.3)
-        face_x = max(0, x - padding)
-        face_y = max(0, y - padding)
-        face_w = min(frame_w - face_x, w + 2*padding)
-        face_h = min(frame_h - face_y, h + 2*padding)
-        
-        return (face_x, face_y, face_w, face_h)
-    
-    else:  # full
-        return (0, 0, frame_w, frame_h)
-
 def get_median_crop_region(crop_history):
     """Calculate median crop region from history for extra stability"""
     if not crop_history:
@@ -463,7 +389,6 @@ def get_median_crop_region(crop_history):
     w_coords = [crop[2] for crop in crop_history]
     h_coords = [crop[3] for crop in crop_history]
     
-    # Calculate median values
     median_x = int(np.median(x_coords))
     median_y = int(np.median(y_coords))
     median_w = int(np.median(w_coords))
@@ -486,7 +411,7 @@ def blend_crop_regions(prev_region, current_region, smoothing_factor):
     return (blended_x, blended_y, blended_w, blended_h)
 
 def get_fallback_crop(frame_shape, crop_type, output_size):
-    """Get fallback crop region when no face is detected"""
+    """Get fallback crop region when no landmarks are detected"""
     h, w = frame_shape[:2]
     
     if crop_type == "lips":
@@ -579,7 +504,7 @@ def extract_file_info(video_path, subset_dir):
     return None, None, None, None
 
 def main():
-    parser = argparse.ArgumentParser(description="TCD-TIMIT Preprocessing Pipeline (HD-Optimized)")
+    parser = argparse.ArgumentParser(description="TCD-TIMIT Preprocessing Pipeline (HD-Optimized with MediaPipe)")
     parser.add_argument("--data-dir", type=str, required=True, help="Directory of TCD-TIMIT dataset")
     parser.add_argument("--root-dir", type=str, required=True, help="Root directory for output")
     parser.add_argument("--subset", type=str, required=True, choices=["volunteers", "lipspeakers"], 
@@ -616,8 +541,6 @@ def main():
     dst_txt_dir = os.path.join(args.root_dir, dataset, f"{dataset}_text_seg{seg_duration}s{crop_suffix}")
     dst_aud_dir = dst_vid_dir  # Audio files in same directory as video files
     labels_dir = os.path.join(args.root_dir, dataset, "labels")
-    
-
     
     # Find transcript files
     data_path = Path(args.data_dir)
@@ -661,8 +584,7 @@ def main():
                 speaker_videos[key] = []
             speaker_videos[key].append((video_path, transcript_id))
 
-    print(f"� Found {len(video_files)} videos, {len(speaker_videos)} (speaker, session, camera_view) groups")
-    
+    print(f"📹 Found {len(video_files)} videos, {len(speaker_videos)} (speaker, session, camera_view) groups")
     
     # Process videos
     csv_data = []

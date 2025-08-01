@@ -27,7 +27,7 @@ def main():
     parser.add_argument("--landmarks-dir", type=str, default=None, help="Directory of landmarks")
     parser.add_argument("--root-dir", type=str, required=True, help="Root directory of preprocessed dataset")
     parser.add_argument("--subset", type=str, required=True, help="Subset (train/val/test)")
-    parser.add_argument("--dataset", type=str, required=True, help="Dataset name (lrs2/lrs3)")
+    parser.add_argument("--dataset", type=str, default="lrs2", help="Dataset name (lrs2/lrs3)")
     parser.add_argument("--seg-duration", type=int, default=16, help="Segment duration in seconds")
     parser.add_argument(
         "--crop-type", 
