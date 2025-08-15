@@ -76,8 +76,8 @@ def count_frames(fids, base_dir):
     for fid in tqdm(fids, desc="Counting frames"):
         # Remove lrs3_video_seg16s/ prefix if present to get the relative path
         clean_fid = fid
-        if clean_fid.startswith('lrs3_video_seg16s/'):
-            clean_fid = clean_fid[len('lrs3_video_seg16s/'):]
+        if '/' in clean_fid:
+            clean_fid = clean_fid.split('/', 1)[1]
         
         wav_fn = os.path.join(base_dir, clean_fid + ".wav")
         video_fn = os.path.join(base_dir, clean_fid + ".mp4")
@@ -110,8 +110,8 @@ def check_missing_files(fids, base_dir):
     for fid in tqdm(fids, desc="Checking files"):
         # Remove lrs3_video_seg16s/ prefix if present to get the relative path
         clean_fid = fid
-        if clean_fid.startswith('lrs3_video_seg16s/'):
-            clean_fid = clean_fid[len('lrs3_video_seg16s/'):]
+        if '/' in clean_fid:
+            clean_fid = clean_fid.split('/', 1)[1]
         
         wav_fn = os.path.join(base_dir, clean_fid + ".wav")
         video_fn = os.path.join(base_dir, clean_fid + ".mp4")
