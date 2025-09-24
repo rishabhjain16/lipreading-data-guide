@@ -1,7 +1,9 @@
 # LRS2 Dataset Preparation Guide
 
 ## Overview
-This project is based on [Auto-AVSR data preparation](https://github.com/mpc001/auto_avsr/tree/main/preparation), however we have simplified the scripts to work with ease. You can follow the original Auto-AVSR approach or use the streamlined scripts we provide here.
+This project is based on [Auto-AVSR data preparation](https://github.com/mpc001/auto_avsr/tree/main/preparation), however we have simplified the scripts to work with ease. You can follow the original Auto-AVSR approach or use the streamlined scripts we provide here. 
+
+Note: Retinaface works much better than mediapipe on many examples. 
 
 ### Setup
 

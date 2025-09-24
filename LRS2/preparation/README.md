@@ -239,7 +239,7 @@ python asr_infer.py \
 - `groups`: Number of groups the dataset was split into during preprocessing.
 - `job-index`: Job index for the current group.
 
-6. Run the following command to merge labels. (Same as the merge solution at [preprocessing-lrs2-or-lrs3](#preprocessing-lrs2-or-lrs3))
+6. Run the following command to merge labels.
 
 ```Shell
 python merge.py \
