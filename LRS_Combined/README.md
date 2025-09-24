@@ -98,3 +98,60 @@ lrs_combined_metadata/
 └── dict.wrd.txt
 ```
 
+
+## Script 3: extract_dataset_csv.py
+
+Extracts separate CSV files for LRS2 and/or LRS3 from the combined dataset into the same labels folder.
+
+### Usage
+
+```bash
+python extract_dataset_csv.py --combined-dir /path/to/combined/dataset
+```
+
+### Examples
+
+Extract both LRS2 and LRS3 CSV files (default):
+```bash
+python extract_dataset_csv.py --combined-dir /home/rishabh/Desktop/Datasets/combine_lrs
+```
+
+Extract only LRS2 CSV files:
+```bash
+python extract_dataset_csv.py --combined-dir /home/rishabh/Desktop/Datasets/combine_lrs --dataset lrs2
+```
+
+Extract only LRS3 CSV files:
+```bash
+python extract_dataset_csv.py --combined-dir /home/rishabh/Desktop/Datasets/combine_lrs --dataset lrs3
+```
+
+### Output
+
+Files are created in the same `labels/` folder:
+```
+combine_lrs/labels/
+├── lrs_combined_train_transcript_lengths_seg16s.csv (original combined)
+├── lrs_combined_val_transcript_lengths_seg16s.csv   (original combined)
+├── lrs_combined_test_transcript_lengths_seg16s.csv  (original combined)
+├── lrs2_train_transcript_lengths_seg16s.csv         (LRS2 only)
+├── lrs2_val_transcript_lengths_seg16s.csv           (LRS2 only)
+├── lrs2_test_transcript_lengths_seg16s.csv          (LRS2 only)
+├── lrs3_train_transcript_lengths_seg16s.csv         (LRS3 only)
+├── lrs3_val_transcript_lengths_seg16s.csv           (LRS3 only)
+└── lrs3_test_transcript_lengths_seg16s.csv          (LRS3 only)
+```
+
+**Use Case**: When you want to train on only LRS2 or LRS3 data, but the files are in the combined dataset structure.
+
+## Workflow Options
+
+### Option 1: Full Combined Dataset
+1. Run `combine_datasets.py` to create the combined dataset
+2. Run `combine_lrs_avhubert.py` to create training metadata for the full combined dataset
+
+### Option 2: Individual Dataset from Combined Structure
+1. Run `combine_datasets.py` to create the combined dataset
+2. Run `extract_dataset_csv.py` to create CSV files for training on just LRS2 or LRS3
+
+This gives you flexibility to train on the combined dataset or individual datasets while maintaining the same file structure.

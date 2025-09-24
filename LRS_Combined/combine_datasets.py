@@ -77,12 +77,13 @@ def combine_csv_files(lrs2_labels_dir, lrs3_labels_dir, output_labels_dir):
                 if original_path.startswith('lrs2_video_seg16s/'):
                     # Remove lrs2_video_seg16s/ and add lrs_combined_video_seg16s/lrs2/
                     clean_path = original_path.replace('lrs2_video_seg16s/', '')
-                    updated_path = f"lrs_combined/lrs_combined_video_seg16s/lrs2/{clean_path}"
+                    updated_path = f"lrs_combined_video_seg16s/lrs2/{clean_path}"
                 else:
-                    updated_path = f"lrs_combined/lrs_combined_video_seg16s/lrs2/{original_path}"
+                    updated_path = f"lrs_combined_video_seg16s/lrs2/{original_path}"
                 
-                # Create new row with updated path
+                # Create new row with updated dataset name and path
                 new_row = row.copy()
+                new_row[0] = 'lrs_combined'  # Update dataset name to folder name
                 new_row[1] = updated_path
                 combined_data.append(new_row)
         
@@ -101,12 +102,13 @@ def combine_csv_files(lrs2_labels_dir, lrs3_labels_dir, output_labels_dir):
                 if original_path.startswith('lrs3_video_seg16s/'):
                     # Remove lrs3_video_seg16s/ and add lrs_combined_video_seg16s/lrs3/
                     clean_path = original_path.replace('lrs3_video_seg16s/', '')
-                    updated_path = f"lrs_combined/lrs_combined_video_seg16s/lrs3/{clean_path}"
+                    updated_path = f"lrs_combined_video_seg16s/lrs3/{clean_path}"
                 else:
-                    updated_path = f"lrs_combined/lrs_combined_video_seg16s/lrs3/{original_path}"
+                    updated_path = f"lrs_combined_video_seg16s/lrs3/{original_path}"
                 
-                # Create new row with updated path
+                # Create new row with updated dataset name and path
                 new_row = row.copy()
+                new_row[0] = 'lrs_combined'  # Update dataset name to folder name
                 new_row[1] = updated_path
                 combined_data.append(new_row)
         
