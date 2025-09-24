@@ -1,6 +1,6 @@
 # Note: 
 
-1. This repo is orked from: https://github.com/mpc001/auto_avsr/tree/main/preparation
+1. This repo is orked from: https://github.com/mpc001/auto_avsr/tree/main/preparation.
 
 2. Please refer to previous page Readme Instructions for updated easy to use scripts.
 
