@@ -1,11 +1,11 @@
-Note: 
+# Note: 
 
 1. This repo is orked from: https://github.com/mpc001/auto_avsr/tree/main/preparation
 
 2. Please refer to previous page Readme Instructions for updated easy to use scripts.
 
 
-# Pre-processing
+## Pre-processing
 
 We provide a pre-processing pipeline in this repository for detecting and cropping mouth regions of interest (ROIs) as well as corresponding audio waveforms for LRS2, LRS3, and VoxCeleb2.
 
