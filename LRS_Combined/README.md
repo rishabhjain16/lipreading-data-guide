@@ -99,31 +99,31 @@ lrs_combined_metadata/
 ```
 
 
-## Script 3: extract_dataset_csv.py
+## Script 3: individual_metadata_csv.py
 
 Extracts separate CSV files for LRS2 and/or LRS3 from the combined dataset into the same labels folder.
 
 ### Usage
 
 ```bash
-python extract_dataset_csv.py --combined-dir /path/to/combined/dataset
+python individual_metadata_csv.py --combined-dir /path/to/combined/dataset
 ```
 
 ### Examples
 
 Extract both LRS2 and LRS3 CSV files (default):
 ```bash
-python extract_dataset_csv.py --combined-dir /home/rishabh/Desktop/Datasets/combine_lrs
+python individual_metadata_csv.py --combined-dir /home/rishabh/Desktop/Datasets/combine_lrs
 ```
 
 Extract only LRS2 CSV files:
 ```bash
-python extract_dataset_csv.py --combined-dir /home/rishabh/Desktop/Datasets/combine_lrs --dataset lrs2
+python individual_metadata_csv.py --combined-dir /home/rishabh/Desktop/Datasets/combine_lrs --dataset lrs2
 ```
 
 Extract only LRS3 CSV files:
 ```bash
-python extract_dataset_csv.py --combined-dir /home/rishabh/Desktop/Datasets/combine_lrs --dataset lrs3
+python individual_metadata_csv.py --combined-dir /home/rishabh/Desktop/Datasets/combine_lrs --dataset lrs3
 ```
 
 ### Output
@@ -152,6 +152,6 @@ combine_lrs/labels/
 
 ### Option 2: Individual Dataset from Combined Structure
 1. Run `combine_datasets.py` to create the combined dataset
-2. Run `extract_dataset_csv.py` to create CSV files for training on just LRS2 or LRS3
+2. Run `individual_metadata_csv.py` to create CSV files for training on just LRS2 or LRS3
 
 This gives you flexibility to train on the combined dataset or individual datasets while maintaining the same file structure.
