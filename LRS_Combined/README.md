@@ -144,14 +144,3 @@ combine_lrs/labels/
 
 **Use Case**: When you want to train on only LRS2 or LRS3 data, but the files are in the combined dataset structure.
 
-## Workflow Options
-
-### Option 1: Full Combined Dataset
-1. Run `combine_datasets.py` to create the combined dataset
-2. Run `combine_lrs_avhubert.py` to create training metadata for the full combined dataset
-
-### Option 2: Individual Dataset from Combined Structure
-1. Run `combine_datasets.py` to create the combined dataset
-2. Run `individual_metadata_csv.py` to create CSV files for training on just LRS2 or LRS3
-
-This gives you flexibility to train on the combined dataset or individual datasets while maintaining the same file structure.
