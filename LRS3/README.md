@@ -1,7 +1,11 @@
 # LRS3 Dataset Preparation Guide
 
 ## Overview
-This project is based on [Auto-AVSR data preparation](https://github.com/mpc001/auto_avsr/tree/main/preparation), however we have simplified the scripts to work with ea└── metadata/                       # Step 3 output: Final training files
+This project is based on [Auto-AVSR data preparation](https://github.com/mpc001/auto_avsr/tree/main/preparation), however we have simplified the scripts to work with Auto-AVSR and AV-Hubert Kind repo. 
+
+```bash
+AVHUBERT Data prep: 
+└── metadata/                       # Step 3 output: Final training files
     ├── train.tsv                   # Training manifest
     ├── valid.tsv                   # Validation manifest  
     ├── test.tsv                    # Test manifest
@@ -17,7 +21,7 @@ This project is based on [Auto-AVSR data preparation](https://github.com/mpc001/
         ├── spm_unigram1000.model
         ├── smp_unigram1000.vocab
         └── spm_unigram1000.txtfollow the original Auto-AVSR approach or use the streamlined scripts we provide here.
-
+```
 ## Setup
 Before processing LRS3 data, download the validation split file:
 
@@ -270,5 +274,3 @@ After running the complete pipeline, your directory structure will look like thi
 ---
 
 ## That's it! 🎉
-
-Your LRS3 dataset is now ready for training with proper validation split and no data leakage!
