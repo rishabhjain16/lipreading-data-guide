@@ -9,6 +9,13 @@ A collection of tools and guides to prepare popular lip reading datasets into a 
 - **Phones/**: Phoneme conversion tools for enhanced training
 - **TCD-TIMIT/**: TCD-TIMIT dataset preparation scripts
 - **WildVSR/**: WildVSR dataset preparation scripts
+- **Voxceleb2/**: To do
+- **AVCocktail/AVYT/**: To do
+- **Muavic/**: To do
+- **Grid/**: To do
+- **Lombard Grid/**: To do
+
+
 
 ## Getting Started
 
