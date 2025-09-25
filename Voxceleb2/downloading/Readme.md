@@ -1,4 +1,5 @@
 # VoxCeleb2 Dataset
+Note: This repository provides a simplified guide for preparing the VoxCeleb2 dataset, including links to a publicly available mirror hosted on Hugging Face. However, users are strongly advised to obtain their own licence for VoxCeleb2 from the official source before using the dataset. This ensures compliance with the original licensing terms and helps avoid any legal or ethical issues related to dataset usage.
 
 This repository provides instructions to download, extract, and organize the **VoxCeleb2** dataset from [Hugging Face](https://huggingface.co/datasets/Reverb/voxceleb2).
 
