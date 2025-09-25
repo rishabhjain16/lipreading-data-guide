@@ -32,7 +32,7 @@ This repository provides access to two audiovisual datasets: **AVSRCocktail** an
   - `avyt-mix`: 
     - Splits: train, test
   - `lrs2`:
-    - Splits: train, valid, pretrain, test: [test_snr_{0/5/10/n5}_interferer_{1/2}
+    - Splits: train, valid, pretrain, test: [test_snr_{0/5/10/n5}\_interferer\_{1/2}
   - `vox2`: 
     - Splits: dev, test
 ---
