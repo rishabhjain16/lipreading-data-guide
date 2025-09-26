@@ -45,14 +45,14 @@ Structure: aac.7z.001, aac.7z.002, ..., aac.7z.015
 
 Structure: vox2_dev_mp4_partaa, vox2_dev_mp4_partab, ..., vox2_dev_mp4_partai
 ```bash
-cat vox2_dev_mp4_part* > vox2_dev_full.tar
+cat vox2_dev_mp4* > vox2_dev_full.zip
 ```
 
 Video files are split across multiple parts. Above command will keep all parts in the same folder. Keep the .tar extension since the combined file is a tar archive.
 
 
 ```bash
-tar -xf vox2_dev_full.tar -C vox2_dev_full/
+unzip vox2_dev_full.zip -C vox2_dev_full/
 ```
 This will extracts the contents into a folder vox2_dev_full.
 
@@ -64,19 +64,4 @@ vox2_dev_txt.zip, vox2_test_txt.zip – transcript files for dev/test sets
 ```bash
 unzip vox2_dev_txt.zip -d vox2_dev_txt/
 unzip vox2_test_txt.zip -d vox2_test_txt/
-```
-
--oaac/ extracts files into the folder aac/
-
-
-
-## Folder Structure After Extraction
-```bash
-voxceleb2/
-├── aac/                   # Extracted audio files
-├── vox2_dev_full/          # Extracted videos
-├── vox2_dev_txt/           # Transcripts
-├── vox2_test_txt/          # Test transcripts
-├── vox2_meta.csv           # Metadata CSV
-└── README.md
 ```
