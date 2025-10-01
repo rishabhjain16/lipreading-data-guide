@@ -131,64 +131,12 @@ python preparation/parse_mlf.py --mlf-file /path/to/file.mlf
 - **GPU**: CUDA-capable GPU recommended for optimal performance
 - **Dependencies**: `pip install ibug-face_detection ibug-face_alignment torch torchvision torchaudio`
 
-## Examples
-
-```bash
-# Lips processing (96x96, recommended for lip-reading)
-python preparation/step1_prepare_tcd_retinaface.py \
-    --data-dir /path/to/TCD-TIMIT/ \
-    --root-dir /path/to/output \
-    --subset volunteers \
-    --crop-type lips
-
-# Face processing (224x224, for multimodal models)
-python preparation/step1_prepare_tcd_retinaface.py \
-    --data-dir /path/to/TCD-TIMIT/ \
-    --root-dir /path/to/output \
-    --subset volunteers \
-    --crop-type face
-
-# Process both subsets
-for subset in volunteers lipspeakers; do
-    echo "Processing $subset subset..."
-    python preparation/step1_prepare_tcd_retinaface.py \
-        --data-dir /path/to/TCD-TIMIT/ \
-        --root-dir /path/to/output \
-        --subset $subset \
-        --crop-type lips
-done
-
-# Custom splits for research reproducibility
-python preparation/step2_generate_file_lists.py \
-    --tcd-data-dir /path/to/processed/videos \
-    --split-ratios "0.8,0.1,0.1" \
-    --seed 123  # Always use the same seed for reproducible results
-
-# Test with small subset first (process ~117 files instead of 11,662)
-python preparation/step1_prepare_tcd_retinaface.py \
-    --data-dir /path/to/TCD-TIMIT/ \
-    --root-dir /path/to/output \
-    --subset volunteers \
-    --crop-type lips \
-    --groups 100 \
-    --job-index 0
-
-# Parallel processing (split into 4 jobs)
-for i in {0..3}; do
-    python preparation/step1_prepare_tcd_retinaface.py \
-        --data-dir /path/to/TCD-TIMIT/ \
-        --root-dir /path/to/output \
-        --subset volunteers \
-        --crop-type lips \
-        --groups 4 \
-        --job-index $i &
-done
-wait
-```
-
 ## Dependencies
 
 ### Installation:
+
+**For detailed installation instructions and tools setup, refer to the `tools/` folder.**
+
 ```bash
 pip install -r requirements.txt
 pip install torch torchvision torchaudio
@@ -197,4 +145,4 @@ pip install ibug-face_detection ibug-face_alignment
 
 Main dependencies: OpenCV, NumPy, Pandas, tqdm, ffmpeg, PyTorch
 
-**Note**: RetinaFace requires a CUDA-capable GPU for optimal performance.
+**Note**: RetinaFace requires a CUDA-capable GPU for optimal performance. See `tools/` directory for complete setup instructions and required libraries on working with tools such as face_alignment and face_detection for RetinaFace.
