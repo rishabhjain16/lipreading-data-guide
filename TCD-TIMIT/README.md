@@ -103,10 +103,10 @@ python preparation/parse_mlf.py --mlf-file /path/to/file.mlf
 ### Step 1 Options
 - `--crop-type`: Choose processing mode based on your use case:
   - `lips`: Mouth region only (96x96) - For pure lip-reading, fastest processing
-  - `face`: Balanced face crop (224x224) - Good face/lip context, recommended
-  - `full`: Extended head area (224x224+) - Maximum context, slower processing
-- `--output-size`: Target resolution (96, 224, 512, etc.) - Higher = better quality
+  - `face`: Full face crop (224x224) - Good face/lip context, recommended for multimodal models
 - `--subset`: `volunteers` (59 speakers) or `lipspeakers` (56 speakers)
+- `--groups`: Number of parallel jobs for faster processing
+- `--job-index`: Job index for parallel processing (0 to groups-1)
 - `--max-videos`: Limit processing for testing (e.g., 100 videos)
 
 ### Step 2 Options  
