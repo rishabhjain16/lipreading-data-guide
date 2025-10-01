@@ -9,11 +9,12 @@ A collection of tools and guides to prepare popular lip reading datasets into a 
 - **Phones/**: Phoneme conversion tools for enhanced training
 - **TCD-TIMIT/**: TCD-TIMIT dataset preparation scripts
 - **WildVSR/**: WildVSR dataset preparation scripts
-- **Voxceleb2/**: To do
+- **Voxceleb2/**: VoxCeleb2 dataset preparation and processing scripts
 - **AVCocktail/AVYT/**: Dataset is prepared in webDataset format to be used with AVCocktail and MCOREC challenge. 
 - **Muavic/**: To do
 - **Grid/**: To do
 - **Lombard Grid/**: To do
+- **MultiVSR/**: To do
 
 
 ## Getting Started
