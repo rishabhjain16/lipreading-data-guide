@@ -1,55 +1,52 @@
 # TCD-TIMIT Preprocessing
 
-Complete preprocessing pipeline for TCD-TIMIT   
-```bash
+Complete preprocessing pipeline for TCD-TIMIT dataset with HD video processing, audio extraction, and multiple output formats.
 
-└── metadata/                                # Training Manifests
-       ├── train.txt, val.txt, test.txt           # File lists
-       ├── train.tsv, valid.tsv, test.tsv         # LRS-format manifests
-       ├── train.wrd, valid.wrd, test.wrd         # Transcriptions
-       ├── dict.wrd.txt                           # Vocabulary
-       ├── nframes.audio, nframes.video           # Frame counts
-       └── vocab filestaset with HD video processing, audio extraction, and multiple output formats.
-```
+**Note**: The RetinaFace detector is similar to Auto-AVSR data preparation codebase, modified to work with TCD-TIMIT dataset. RetinaFace tends to work better with 1080p videos of TCD-TIMIT as compared to OpenCV Haar cascades, providing superior face detection and landmark accuracy for high-resolution video processing. 
+
 
 ## Quick Start
 
 ```bash
-# Step 1: Process videos (face mode, 224x224)
-python preparation/step1_prepare_tcd_timit.py \
+# Step 1: Process videos with RetinaFace (lips, 96x96)
+python preparation/step1_prepare_tcd_retinaface.py \
     --data-dir /path/to/TCD-TIMIT/ \
     --root-dir /path/to/output \
     --subset volunteers \
-    --crop-type face \
-    --output-size 224
+    --crop-type lips
+
+# Step 1: Process videos with RetinaFace (face, 224x224)
+python preparation/step1_prepare_tcd_retinaface.py \
+    --data-dir /path/to/TCD-TIMIT/ \
+    --root-dir /path/to/output \
+    --subset volunteers \
+    --crop-type face
 
 # Step 2: Generate splits (reproducible with seed)
 python preparation/step2_generate_file_lists.py \
-    --tcd-data-dir /path/to/output/tcd_timit/tcd_timit_video_seg16s_face_224x224 \
+    --tcd-data-dir /path/to/output/tcd_timit/tcd_timit_video \
     --seed 42
 
 # Step 3: Create metadata
 python preparation/step3_metadata_prep.py \
-    --tcd-data-dir /path/to/output/tcd_timit/tcd_timit_video_seg16s_face_224x224 \
+    --tcd-data-dir /path/to/output/tcd_timit/tcd_timit_video \
     --metadata-dir /path/to/output/tcd_timit/metadata
 ```
 
 ## Key Features
 
-### Step 1: Video Preprocessing
+### Step 1: Video Preprocessing with RetinaFace
 - **HD Processing**: Uses full 1920x1080 resolution for accurate face detection
-- **Face Detection**: OpenCV Haar Cascade (optimized parameters for stability)
-- **Multiple Crop Modes**: 
+- **RetinaFace Detection**: High-accuracy face detection and landmark localization, consistent with VoxCeleb2 preprocessing
+- **Two Crop Modes**: 
   - `lips`: Mouth region only (96x96) - Best for pure lip-reading models
-  - `face`: Tight face crop with 5% padding (224x224) - Balanced face/lip context
-  - `full`: Extended face area with 40% padding (224x224+) - Full head context
+  - `face`: Full face crop (224x224) - Balanced face/lip context for multimodal models
 - **Audio Extraction**: Co-located 16kHz mono WAV files using FFmpeg
-- **Dual Text Formats**: 
-  - `.phn` files: Phonemes from MLF (e.g., "sh iy hh ae d...")
+- **Text Files**: 
   - `.txt` files: TIMIT sentence mapping (e.g., "She had your dark suit...")
-- **Unique Naming**: `{speaker}_{transcript}` format (e.g., `01M_sa1`) prevents conflicts
-- **Temporal Smoothing**: Advanced jitter reduction (0.8 smoothing factor)
-- **Quality Output**: Clean progress display with stability metrics
+- **Unique Naming**: `{speaker}_{session}_{camera}_{transcript}` format prevents conflicts
+- **Temporal Smoothing**: Advanced jitter reduction with RetinaFace landmark tracking
+- **Color Output**: RGB videos (not grayscale) for better visual quality
 
 ### Step 2: Data Splits
 - **Speaker-Based**: No speaker leakage between train/val/test
@@ -68,18 +65,20 @@ python preparation/step3_metadata_prep.py \
 ```
 output/
 ├── tcd_timit/
-│   ├── tcd_timit_video_seg16s_face_224x224/     # Videos + Audio
-│   │   └── volunteers/01M/
-│   │       ├── 01M_sa1.mp4                      # Video
-│   │       ├── 01M_sa1.wav                      # Audio  
+│   ├── tcd_timit_video/                         # Videos + Audio (lips, 96x96)
+│   │   └── volunteers/01M/Clips/30degcam/
+│   │       ├── 01M_Clips_30degcam_sa1.mp4       # Video
+│   │       ├── 01M_Clips_30degcam_sa1.wav       # Audio  
 │   │       └── ...
-│   ├── tcd_timit_text_seg16s_face/              # Text Files
-│   │   └── volunteers/01M/
-│   │       ├── 01M_sa1.phn                      # Phonemes
-│   │       ├── 01M_sa1.txt                      # Sentences
+│   ├── tcd_timit_video_face_224x224/            # Videos + Audio (face, 224x224)
+│   ├── tcd_timit_text/                          # Text Files (lips)
+│   │   └── volunteers/01M/Clips/30degcam/
+│   │       ├── 01M_Clips_30degcam_sa1.txt       # Sentences
 │   │       └── ...
+│   ├── tcd_timit_text_face_224x224/             # Text Files (face)
 │   ├── labels/                                  # CSV Metadata
-│   │   └── tcd_timit_volunteers_face_224x224.csv
+│   │   ├── tcd_timit_volunteers_retinaface.csv
+│   │   └── tcd_timit_volunteers_face_224x224_retinaface.csv
 │   └── metadata/                                # Training Manifests
 │       ├── train.txt, val.txt, test.txt
 │       └── vocab files
@@ -117,49 +116,47 @@ python preparation/parse_mlf.py --mlf-file /path/to/file.mlf
 ### Step 3 Options
 - `--vocab-size`: SentencePiece vocabulary size (default: 1000)
 
-## Face Detection Comparison
+## RetinaFace Processing
 
-### OpenCV Haar Cascade
-For TCD-TIMIT's controlled studio environment, OpenCV Haar Cascade provides the best balance of speed, stability, and accuracy. The temporal smoothing we've implemented addresses most consistency issues.
+**Note**: The RetinaFace detector is similar to Auto-AVSR data preparation codebase, modified to work with TCD-TIMIT dataset. RetinaFace tends to work better with 1080p videos of TCD-TIMIT as compared to OpenCV Haar cascades, providing superior face detection and landmark accuracy for high-resolution video processing.
+
+### Why RetinaFace?
+- **Higher Accuracy**: Superior face detection and landmark localization compared to other methods
+- **Robust**: Handles pose variations and challenging lighting conditions well
+- **Consistent**: Same preprocessing pipeline as VoxCeleb2 for dataset compatibility
+- **Research Grade**: Used in state-of-the-art lip-reading research
+- **HD Optimized**: Specifically designed to leverage TCD-TIMIT's 1080p video quality
+
+### Requirements
+- **GPU**: CUDA-capable GPU recommended for optimal performance
+- **Dependencies**: `pip install ibug-face_detection ibug-face_alignment torch torchvision torchaudio`
 
 ## Examples
 
 ```bash
-# Lips processing (96x96, for pure lip-reading models)
-# Best for: Lightweight models, mobile deployment, research focusing on lip motion
-python preparation/step1_prepare_tcd_timit.py \
+# Lips processing (96x96, recommended for lip-reading)
+python preparation/step1_prepare_tcd_retinaface.py \
     --data-dir /path/to/TCD-TIMIT/ \
     --root-dir /path/to/output \
     --subset volunteers \
-    --crop-type lips \
-    --output-size 96
+    --crop-type lips
 
-# Balanced face processing (224x224, recommended)
-# Best for: General lip-reading, good face/lip context, most versatile
-python preparation/step1_prepare_tcd_timit.py \
+# Face processing (224x224, for multimodal models)
+python preparation/step1_prepare_tcd_retinaface.py \
     --data-dir /path/to/TCD-TIMIT/ \
     --root-dir /path/to/output \
     --subset volunteers \
-    --crop-type face \
-    --output-size 224
+    --crop-type face
 
-# High-resolution processing (512x512)
-# Best for: Research, fine-grained analysis, when compute isn't limited
-python preparation/step1_prepare_tcd_timit.py \
-    --data-dir /path/to/TCD-TIMIT/ \
-    --root-dir /path/to/output \
-    --subset volunteers \
-    --crop-type face \
-    --output-size 512
-
-# Full head context (maximum information)
-# Best for: Multimodal models, gesture analysis, head pose studies
-python preparation/step1_prepare_tcd_timit.py \
-    --data-dir /path/to/TCD-TIMIT/ \
-    --root-dir /path/to/output \
-    --subset volunteers \
-    --crop-type full \
-    --output-size 224
+# Process both subsets
+for subset in volunteers lipspeakers; do
+    echo "Processing $subset subset..."
+    python preparation/step1_prepare_tcd_retinaface.py \
+        --data-dir /path/to/TCD-TIMIT/ \
+        --root-dir /path/to/output \
+        --subset $subset \
+        --crop-type lips
+done
 
 # Custom splits for research reproducibility
 python preparation/step2_generate_file_lists.py \
@@ -167,23 +164,37 @@ python preparation/step2_generate_file_lists.py \
     --split-ratios "0.8,0.1,0.1" \
     --seed 123  # Always use the same seed for reproducible results
 
-# Process both subsets for complete dataset
-for subset in volunteers lipspeakers; do
-    echo "Processing $subset subset..."
-    python preparation/step1_prepare_tcd_timit.py \
+# Test with small subset first (process ~117 files instead of 11,662)
+python preparation/step1_prepare_tcd_retinaface.py \
+    --data-dir /path/to/TCD-TIMIT/ \
+    --root-dir /path/to/output \
+    --subset volunteers \
+    --crop-type lips \
+    --groups 100 \
+    --job-index 0
+
+# Parallel processing (split into 4 jobs)
+for i in {0..3}; do
+    python preparation/step1_prepare_tcd_retinaface.py \
         --data-dir /path/to/TCD-TIMIT/ \
         --root-dir /path/to/output \
-        --subset $subset \
-        --crop-type face \
-        --output-size 224
+        --subset volunteers \
+        --crop-type lips \
+        --groups 4 \
+        --job-index $i &
 done
+wait
 ```
 
 ## Dependencies
 
-Install requirements:
+### Installation:
 ```bash
 pip install -r requirements.txt
+pip install torch torchvision torchaudio
+pip install ibug-face_detection ibug-face_alignment
 ```
 
-Main dependencies: OpenCV, NumPy, Pandas, tqdm, ffmpeg
+Main dependencies: OpenCV, NumPy, Pandas, tqdm, ffmpeg, PyTorch
+
+**Note**: RetinaFace requires a CUDA-capable GPU for optimal performance.
