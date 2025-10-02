@@ -19,7 +19,7 @@ A collection of tools and guides to prepare popular lip reading datasets into a 
 
 ## Available Utils
 - **Phones**: Phoneme conversion tools for enhanced training
-- **webDataset**: convert auto_avsr prepared data into webDataset format and Huggingface.
+- **webData**: convert auto_avsr prepared data into webDataset format and Huggingface.
 
 
 ## Getting Started

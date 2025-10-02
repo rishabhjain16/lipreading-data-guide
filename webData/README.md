@@ -124,7 +124,7 @@ test/ \
 
 **Option C: Python API**
 from huggingface_hub import HfApi
-
+ ```bash
 api = HfApi()
 api.upload_folder(
 folder_path="/path/to/lrs3_webdataset",
@@ -133,4 +133,4 @@ repo_type="dataset",
 multi_commits=True,
 multi_commits_verbose=True
 )
-
+```
