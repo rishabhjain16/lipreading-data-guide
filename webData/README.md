@@ -71,8 +71,66 @@ from torch.utils.data import DataLoader
 loader = DataLoader(dataset, batch_size=32, num_workers=4)
 ```
 
-## Notes
+## Upload to HuggingFace
 
-- Process each split (train/valid/test) separately
-- Adjust `samples_per_shard` based on dataset size
-- MuAViC script preserves language and timing metadata
+### Step 1: Install and Login
+
+```bash
+pip install huggingface_hub
+huggingface-cli login
+```
+
+### Step 2: Create Repository
+
+```bash
+huggingface-cli repo create your-username/lrs3-webdataset --type dataset
+```
+
+
+### Step 3: Upload Shards
+
+**Option A: Upload entire folder**
+```bash
+huggingface-cli upload your-username/lrs3-webdataset \
+/path/to/lrs3_webdataset \
+--repo-type dataset
+```
+
+
+**Option B: Upload by split**
+
+Train
+```bash
+huggingface-cli upload your-username/lrs3-webdataset \
+/path/to/lrs3_webdataset/lrs3_train-*.tar \
+train/ \
+--repo-type dataset
+```
+
+Val
+```bash
+huggingface-cli upload your-username/lrs3-webdataset \
+/path/to/lrs3_webdataset/lrs3_val-*.tar \
+val/ \
+--repo-type dataset
+```
+Test
+```bash
+huggingface-cli upload your-username/lrs3-webdataset \
+/path/to/lrs3_webdataset/lrs3_test-*.tar \
+test/ \
+--repo-type dataset
+```
+
+**Option C: Python API**
+from huggingface_hub import HfApi
+
+api = HfApi()
+api.upload_folder(
+folder_path="/path/to/lrs3_webdataset",
+repo_id="your-username/lrs3-webdataset",
+repo_type="dataset",
+multi_commits=True,
+multi_commits_verbose=True
+)
+
