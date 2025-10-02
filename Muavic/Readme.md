@@ -298,23 +298,6 @@ for split in train valid test; do
 done
 ```
 
-### Parallel Processing
-
-```bash
-# Split processing into 4 parallel jobs
-for i in {0..3}; do
-    python preparation/step1_prepare_muavic_retinaface.py \
-        --data-dir /path/to/muavic/data \
-        --root-dir /path/to/output \
-        --language en \
-        --split train \
-        --crop-type lips \
-        --groups 4 \
-        --job-index $i &
-done
-wait
-```
-
 ## Dependencies
 
 **For detailed installation instructions and tools setup, refer to the `../tools/` folder.**
