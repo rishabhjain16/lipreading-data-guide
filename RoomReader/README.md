@@ -1,5 +1,8 @@
 # RoomReader Dataset Preparation Guide
 
+### Add ons: 
+Might consider adding a way to concetenate smaller chunks into larger ones
+
 ## Overview
 
 The RoomReader dataset is a **multimodal corpus of online multiparty conversational interactions** containing 30 tutorial sessions with 118 unique participants. This preprocessing pipeline adapts the RoomReader dataset for lip reading and visual speech recognition tasks, following the same 3-step approach used for other datasets in this repository.
@@ -168,17 +171,6 @@ The script generates a CSV file with detailed metadata including:
 - `individual`: Participant speaks alone (clean audio for training)
 - `conversational`: Participant speaks with others present (realistic noisy conditions)
 
-### Technical Details
-
-**Face Detection Quality:**
-- Uses RetinaFace for precise 68-point facial landmarks
-- Significantly better than simple bounding box detection
-- Enables accurate lip region extraction even in challenging online video conditions
-
-**Temporal Consistency:**
-- Smooths crop regions between frames to avoid jitter
-- Maintains stable lip/face position throughout utterance
-- Handles variable video quality from online recordings
 
 **Data Modes:**
 - `individual`: Participant speaks alone (clean audio for training)
@@ -312,20 +304,6 @@ If you use the RoomReader dataset, please cite the original paper:
 }
 ```
 
-## License
-
-The RoomReader dataset is subject to a Non-Commercial License Agreement. Please refer to the original license file `NON COMMERCIAL LICENCE AGREEMENT_RoomReaderDataset.pdf` in the dataset directory.
-
-## Next Steps
-
-1. **Implement Step 1**: Video preprocessing with face detection for individual participants
-2. **Implement Step 2**: TextGrid processing and transcript alignment
-3. **Implement Step 3**: Training manifest generation with conversation-aware splits
-4. **Add Quality Filtering**: Implement consent-aware processing and quality checks
-5. **Testing**: Validate pipeline with sample sessions
-
----
-
 ## Complete Pipeline
 
 ### Step 1: Data Preparation (`step1_prepare_roomreader.py`)
@@ -443,3 +421,4 @@ i think that's a good idea
 yes i agree with that
 ...
 ```
+
