@@ -13,7 +13,7 @@ A collection of tools and guides to prepare popular lip reading datasets into a 
 - **Muavic**: Check Muavic Folder - Modified to work with RetinaFace and AutoAVSR preprocessing
 - **Grid**: To do
 - **Lombard Grid**: To do
-- **RoomReader**: To 
+- **RoomReader**: Need to add on concatenation segments, there are too many small segments 
 - **MultiVSR**: To do
 
 
