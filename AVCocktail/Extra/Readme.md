@@ -160,7 +160,7 @@ Aggregating over many chunks, **fixed** tends to inflate WER, **gold** to reduce
 
 ---
 
-## 9. Typical WER differences (from your run)
+## 9. Typical WER differences (from my/their run)
 
 | Split         | WER     |
 |---------------|---------|
