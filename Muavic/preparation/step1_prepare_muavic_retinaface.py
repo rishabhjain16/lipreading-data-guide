@@ -25,6 +25,7 @@ from tqdm import tqdm
 from collections import defaultdict, OrderedDict
 
 import torch
+import torchvision.transforms as transforms
 import ffmpeg
 
 warnings.filterwarnings("ignore")
@@ -38,6 +39,7 @@ parser.add_argument("--split", type=str, required=True, choices=["train", "valid
 parser.add_argument("--detector", type=str, default="retinaface", help="Type of face detector")
 parser.add_argument("--crop-type", type=str, default="lips", choices=["lips", "face"], help="Crop type")
 parser.add_argument("--face-threshold", type=float, default=0.0, help="Minimum face presence ratio (0.0-1.0). 0=disabled, 0.7=strict filtering")
+parser.add_argument("--no-skip", action="store_true", help="Process all segments without any quality checks or filtering")
 parser.add_argument("--groups", type=int, default=1, help="Number of parallel jobs")
 parser.add_argument("--job-index", type=int, default=0, help="Job index for parallel processing")
 args = parser.parse_args()
@@ -179,7 +181,7 @@ for video_id in tqdm(videos_to_process, desc="Videos"):
             landmarks = landmarks_detector(segment_video)
             
             # Optional face presence filtering (filters slides/audience shots)
-            if args.face_threshold > 0:
+            if args.face_threshold > 0 and not args.no_skip:
                 if landmarks is not None and len(landmarks) > 0:
                     # Count frames with valid, good-quality landmarks
                     valid_frames = 0
@@ -231,7 +233,7 @@ for video_id in tqdm(videos_to_process, desc="Videos"):
                 os.unlink(tmp_path)
             
             # Quality check
-            if len(video_data) < 5 or audio_data.size(1) < 1000:
+            if not args.no_skip and (len(video_data) < 5 or audio_data.size(1) < 1000):
                 skipped_count += 1
                 continue
             

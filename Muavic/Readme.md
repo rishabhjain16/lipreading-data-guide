@@ -194,20 +194,46 @@ Valid frames: 75/100 = 75% ≥ 70% → ✅ Segment kept
 
 **Note**: The script uses mTEDx pre-made segments which are already optimized for ASR (better than raw VTT subtitles)
 
-### Step 2: Generate File Lists and Metadata
+### Step 2: Generate File Lists and Metadata (Optional)
+
+**Note**: Steps 2-3 are only needed for traditional training frameworks (fairseq, etc.). If using WebDataset (recommended), skip to WebDataset conversion below.
 
 ```bash
-# Generate file lists (step 2)
+# Step 2: Generate file lists
 python preparation/step2_generate_file_lists.py \
     --muavic-data-dir /path/to/output/muavic/muavic_video \
-    --language en
+    --language de
 
-# Create metadata for training (step 3)
+# Example with actual paths:
+python preparation/step2_generate_file_lists.py \
+    --muavic-data-dir /home/user/datasets/muavic/muavic_video \
+    --language de
+
+# Step 3: Create metadata (TSV manifests, word files)
 python preparation/step3_metadata_prep.py \
     --muavic-data-dir /path/to/output/muavic/muavic_video \
     --metadata-dir /path/to/output/muavic/metadata \
-    --language en
+    --language de \
+    --vocab-size 1000
+
+# Example with actual paths:
+python preparation/step3_metadata_prep.py \
+    --muavic-data-dir /home/user/datasets/muavic/muavic_video \
+    --metadata-dir /home/user/datasets/muavic/metadata \
+    --language de \
+    --vocab-size 1000
 ```
+
+**What Step 2 creates:**
+- `metadata/de_train.txt` - List of training file IDs
+- `metadata/de_valid.txt` - List of validation file IDs  
+- `metadata/de_test.txt` - List of test file IDs
+
+**What Step 3 creates:**
+- `metadata/nframes.audio.{train,valid,test}` - Audio frame counts
+- `metadata/nframes.video.{train,valid,test}` - Video frame counts
+- `metadata/{train,valid,test}.tsv` - Training manifests
+- `metadata/{train,valid,test}.wrd` - Transcript files
 
 ## File Structure
 

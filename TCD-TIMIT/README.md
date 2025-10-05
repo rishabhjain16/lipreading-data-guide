@@ -22,6 +22,13 @@ python preparation/step1_prepare_tcd_retinaface.py \
     --subset volunteers \
     --crop-type face
 
+# Step 1.1: Create CSV from already-processed files (if Step 1 failed at CSV creation)
+python preparation/step1_1_create_csv.py \
+    --root-dir /path/to/output \
+    --subset volunteers \
+    --crop-type lips \
+    --detector retinaface
+
 # Step 2: Generate splits (reproducible with seed)
 python preparation/step2_generate_file_lists.py \
     --tcd-data-dir /path/to/output/tcd_timit/tcd_timit_video \
@@ -47,6 +54,12 @@ python preparation/step3_metadata_prep.py \
 - **Unique Naming**: `{speaker}_{session}_{camera}_{transcript}` format prevents conflicts
 - **Temporal Smoothing**: Advanced jitter reduction with RetinaFace landmark tracking
 - **Color Output**: RGB videos (not grayscale) for better visual quality
+
+### Step 1.1: Create CSV (Recovery Tool)
+- **Use Case**: If Step 1 completed processing but failed at CSV creation (e.g., pandas error)
+- **Fast**: Scans already-processed files and creates CSV in seconds
+- **No Reprocessing**: Avoids re-running hours of video processing
+- **Automatic**: Matches video files with text files and generates metadata
 
 ### Step 2: Data Splits
 - **Speaker-Based**: No speaker leakage between train/val/test

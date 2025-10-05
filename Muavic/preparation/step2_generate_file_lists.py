@@ -39,6 +39,10 @@ def main():
         print(f"Error: Language directory not found: {lang_dir}")
         return 1
     
+    # Create metadata directory
+    metadata_dir = data_dir.parent / "metadata"
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    
     # Generate file lists for each split
     for split in ['train', 'valid', 'test']:
         split_dir = lang_dir / split
@@ -47,15 +51,15 @@ def main():
             print(f"Warning: Split directory not found: {split_dir}")
             continue
         
-        # Find all video files
-        video_files = sorted(split_dir.glob('*.mp4'))
+        # Find all video files (recursive)
+        video_files = sorted(split_dir.rglob('*.mp4'))
         
         if not video_files:
             print(f"Warning: No video files found in {split_dir}")
             continue
         
-        # Create file list (relative paths from data_dir)
-        file_list_path = data_dir / f"{language}_{split}.txt"
+        # Create file list in metadata directory
+        file_list_path = metadata_dir / f"{language}_{split}.txt"
         
         with open(file_list_path, 'w') as f:
             for video_file in video_files:
@@ -68,7 +72,7 @@ def main():
         print(f"✅ Created {split} file list: {file_list_path} ({len(video_files)} files)")
     
     print(f"\n✅ File lists generated successfully!")
-    print(f"   Location: {data_dir}")
+    print(f"   Location: {metadata_dir}")
     print(f"   Files: {language}_train.txt, {language}_valid.txt, {language}_test.txt")
     
     return 0
