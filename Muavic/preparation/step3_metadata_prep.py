@@ -49,6 +49,15 @@ def count_frames(fids, base_dir):
     
     return total_num_frames
 
+def clean_text(text):
+    """Clean text by removing punctuation symbols"""
+    import re
+    # Remove punctuation like : - " ' , . ! ? ; etc.
+    text = re.sub(r'[":,\.\!\?\;\-\'\(\)\[\]\{\}]', '', text)
+    # Replace multiple spaces with single space
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
 def create_tsv_manifest(fids, base_dir, output_file, text_dir):
     """Create TSV manifest file"""
     print(f"Creating TSV manifest: {output_file}")
@@ -77,7 +86,7 @@ def create_tsv_manifest(fids, base_dir, output_file, text_dir):
             transcript = ""
             if os.path.exists(text_path):
                 with open(text_path, 'r', encoding='utf-8') as tf:
-                    transcript = tf.read().strip()
+                    transcript = clean_text(tf.read().strip())
             
             # Extract speaker/video ID from fid
             video_id = os.path.basename(fid)
@@ -95,7 +104,7 @@ def create_wrd_file(fids, text_dir, output_file):
             
             if os.path.exists(text_path):
                 with open(text_path, 'r', encoding='utf-8') as tf:
-                    transcript = tf.read().strip()
+                    transcript = clean_text(tf.read().strip())
                     f.write(f"{transcript}\n")
             else:
                 f.write("\n")
@@ -135,7 +144,7 @@ def main():
         print(f"{'='*50}")
         
         # Read file list
-        file_list = data_dir / f"{language}_{split}.txt"
+        file_list = metadata_dir / f"{language}_{split}.txt"
         
         if not file_list.exists():
             print(f"Warning: File list not found: {file_list}")
