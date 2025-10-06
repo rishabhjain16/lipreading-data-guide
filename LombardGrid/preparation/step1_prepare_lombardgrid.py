@@ -204,16 +204,61 @@ def parse_grid_utterance(utterance_code):
     except:
         return None
 
+def get_corrected_video_id(filename):
+    """
+    Get corrected video ID for files with WRONG annotations.
+    s46_p_gbszs_WRONG_sgbszs.mov -> s46_p_sgbszs
+    s27_l_bah2s_WRONG_#sil.mov -> s27_l_bah2s_WRONG_#sil (unchanged, will be ignored)
+    """
+    filename_no_ext = filename.replace('.mov', '').replace('.wav', '')
+    parts = filename_no_ext.split('_')
+    
+    # Check if this is a WRONG annotation file
+    if 'WRONG' in parts:
+        wrong_index = parts.index('WRONG')
+        if wrong_index + 1 < len(parts):
+            correct_utterance = parts[wrong_index + 1]
+            # Check if it's a silence marker
+            if 'sil' in correct_utterance.lower() or '#sil' in correct_utterance:
+                return filename_no_ext  # Keep original name for silence files
+            else:
+                # Rebuild with corrected utterance: s{speaker}_{condition}_{corrected_utterance}
+                speaker = parts[0]
+                condition = parts[1]
+                return f"{speaker}_{condition}_{correct_utterance}"
+    
+    # Normal case
+    return filename_no_ext
+
 def extract_transcript_from_filename(filename):
     """
     Extract transcript from Lombard GRID filename.
     Format: s{speaker}_{condition}_{utterance}.mov
     Example: s10_l_bbat9p -> bin blue at t nine please
+    
+    Handle corrections for mislabeled files:
+    - s46_p_gbszs_WRONG_sgbszs -> use sgbszs instead of gbszs
+    - s27_l_bah2s_WRONG_#sil -> return None (silence, should be skipped)
     """
     parts = filename.split('_')
+    
+    # Check if this is a WRONG annotation file
+    if 'WRONG' in parts:
+        wrong_index = parts.index('WRONG')
+        if wrong_index + 1 < len(parts):
+            # Get the correct utterance after WRONG
+            correct_utterance = parts[wrong_index + 1].replace('.mov', '').replace('.wav', '')
+            # Check if it's a silence marker
+            if 'sil' in correct_utterance.lower() or '#sil' in correct_utterance:
+                return None  # Skip silence files
+            else:
+                return parse_grid_utterance(correct_utterance)
+    
+    # Normal case: s{speaker}_{condition}_{utterance}
     if len(parts) >= 3:
         utterance_code = parts[2].replace('.mov', '').replace('.wav', '')
         return parse_grid_utterance(utterance_code)
+    
     return None
 
 def find_video_files(data_dir, view):
@@ -271,6 +316,7 @@ csv_data_by_speaker = {}
 
 processed_count = 0
 skipped_count = 0
+ignored_files = []  # Track files that were intentionally ignored
 
 # Paths to audio and alignment directories
 audio_dir = Path(args.data_dir) / "audio"
@@ -278,18 +324,26 @@ alignment_dir = Path(args.data_dir) / "alignment"
 
 for speaker, vid_filename in tqdm(files_to_process, desc="Processing videos"):
     vid_path = Path(vid_filename)
-    video_id = vid_path.stem  # e.g., s10_l_bbat9p
+    original_video_id = vid_path.stem  # e.g., s10_l_bbat9p or s46_p_gbszs_WRONG_sgbszs
+    corrected_video_id = get_corrected_video_id(vid_path.name)  # e.g., s46_p_sgbszs
     
-    # Find corresponding audio file
-    audio_path = audio_dir / f"{video_id}.wav"
+    # Find corresponding audio file (using original name)
+    audio_path = audio_dir / f"{original_video_id}.wav"
     if not audio_path.exists():
-        print(f"Warning: Audio file not found for {video_id}")
+        print(f"❌ Skipping {original_video_id}: Audio file not found")
         skipped_count += 1
         continue
     
     # Extract transcript from filename
     transcript = extract_transcript_from_filename(vid_path.name)
     if not transcript:
+        # Check if this is an intentionally ignored file (silence)
+        filename = vid_path.name
+        if 'WRONG' in filename and ('sil' in filename.lower() or '#sil' in filename):
+            print(f"🔇 Ignoring {original_video_id}: Silence file")
+            ignored_files.append(original_video_id)
+        else:
+            print(f"❌ Skipping {original_video_id}: Failed to extract transcript")
         skipped_count += 1
         continue
     
@@ -297,17 +351,23 @@ for speaker, vid_filename in tqdm(files_to_process, desc="Processing videos"):
         video_data = vid_dataloader.load_data(vid_filename)
         audio_data = aud_dataloader.load_data(str(audio_path))
     except (UnboundLocalError, TypeError, OverflowError, AssertionError, Exception) as e:
+        print(f"❌ Skipping {original_video_id}: Error loading data - {type(e).__name__}")
         skipped_count += 1
         continue
     
     if video_data is None:
+        print(f"❌ Skipping {original_video_id}: Video processing returned None")
         skipped_count += 1
         continue
     
-    # Create output filename: view/speaker/video_id.mp4
-    dst_vid_filename = os.path.join(dst_vid_dir, args.view, speaker, f"{video_id}.mp4")
-    dst_aud_filename = os.path.join(dst_vid_dir, args.view, speaker, f"{video_id}.wav")
-    dst_txt_filename = os.path.join(dst_txt_dir, args.view, speaker, f"{video_id}.txt")
+    # Create output filename using corrected video ID: view/speaker/corrected_video_id.mp4
+    dst_vid_filename = os.path.join(dst_vid_dir, args.view, speaker, f"{corrected_video_id}.mp4")
+    dst_aud_filename = os.path.join(dst_vid_dir, args.view, speaker, f"{corrected_video_id}.wav")
+    dst_txt_filename = os.path.join(dst_txt_dir, args.view, speaker, f"{corrected_video_id}.txt")
+    
+    # Log correction if name was changed
+    if corrected_video_id != original_video_id:
+        print(f"  🔧 Correcting filename: {original_video_id} -> {corrected_video_id}")
     
     # Use the whole video
     video_length = len(video_data)
@@ -315,6 +375,10 @@ for speaker, vid_filename in tqdm(files_to_process, desc="Processing videos"):
     
     # Basic quality check
     if video_length < 5 or audio_length < 1000:
+        if video_length < 5:
+            print(f"❌ Skipping {original_video_id}: Video too short ({video_length} frames)")
+        if audio_length < 1000:
+            print(f"❌ Skipping {original_video_id}: Audio too short ({audio_length} samples)")
         skipped_count += 1
         continue
     
@@ -331,8 +395,8 @@ for speaker, vid_filename in tqdm(files_to_process, desc="Processing videos"):
     # Add to CSV data
     csv_entry = {
         'speaker': speaker,
-        'video_id': video_id,
-        'condition': video_id.split('_')[1],  # l, p, or 1
+        'video_id': corrected_video_id,
+        'condition': corrected_video_id.split('_')[1],  # l, p, or 1
         'video_path': dst_vid_filename,
         'audio_path': dst_aud_filename,
         'text_path': dst_txt_filename,
@@ -342,6 +406,7 @@ for speaker, vid_filename in tqdm(files_to_process, desc="Processing videos"):
         'detector': args.detector,
         'crop_type': args.crop_type,
         'view': args.view,
+        'original_filename': original_video_id if corrected_video_id != original_video_id else None,
     }
     
     csv_data_all.append(csv_entry)
@@ -350,11 +415,23 @@ for speaker, vid_filename in tqdm(files_to_process, desc="Processing videos"):
         csv_data_by_speaker[speaker] = []
     csv_data_by_speaker[speaker].append(csv_entry)
     
+    # Log successful processing for corrected files
+    if corrected_video_id != original_video_id:
+        print(f"  ✅ Successfully processed corrected file: {corrected_video_id}")
+    
     processed_count += 1
 
 print(f"\n✅ Processing complete!")
 print(f"   Processed: {processed_count} videos")
 print(f"   Skipped: {skipped_count} videos")
+
+# Report ignored files
+if ignored_files:
+    print(f"\n🔇 Ignored files (silence/empty content):")
+    for ignored_file in ignored_files:
+        print(f"   • {ignored_file}")
+    print(f"   Total ignored: {len(ignored_files)}")
+    print(f"   Actual failures: {skipped_count - len(ignored_files)}")
 
 # Save CSV files
 if csv_data_all:
