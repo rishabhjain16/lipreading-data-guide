@@ -267,42 +267,8 @@ ls /path/to/output/roomreader_video_lips/individual/S01/
    find ./roomreader_processed -name "*.mp4" | wc -l
    ```
 
-## Research Applications
-
-### 1. **Lip Reading & Visual Speech Recognition**
-- Individual participant lip reading with high-quality transcriptions
-- Multiparty conversation lip reading challenges
-- Cross-speaker adaptation and generalization
-
-### 2. **Multimodal Conversation Analysis**
-- Audio-visual speaker diarization
-- Engagement and attention detection
-- Turn-taking and conversation dynamics
-
-### 3. **Robust Speech Recognition**
-- Online conversation quality challenges
-- Multi-speaker environments
-- Disfluency and feedback handling
-
-### 4. **Social Signal Processing**
-- Personality trait influence on speech patterns
-- Gender and cultural factors in conversation
-- Engagement level correlation with speech quality
-
 ## Citation
 
-If you use the RoomReader dataset, please cite the original paper:
-
-```bibtex
-@inproceedings{reverdy2022roomreader,
-  title={RoomReader: A Multimodal Corpus of Online Multiparty Conversational Interactions},
-  author={Reverdy, Justine and O'Connor, Sam Russell and Duquenne, Louise and Garaialde, Diego and Cowan, Benjamin R and Harte, Naomi},
-  booktitle={Proceedings of the 13th International Conference on Language Resources and Evaluation (LREC 2022)},
-  pages={},
-  year={2022},
-  address={Marseille, France}
-}
-```
 
 ## Complete Pipeline
 
@@ -422,3 +388,15 @@ yes i agree with that
 ...
 ```
 
+If you use the RoomReader dataset, please cite the original paper:
+
+```bibtex
+@inproceedings{reverdy2022roomreader,
+  title={RoomReader: A Multimodal Corpus of Online Multiparty Conversational Interactions},
+  author={Reverdy, Justine and O'Connor, Sam Russell and Duquenne, Louise and Garaialde, Diego and Cowan, Benjamin R and Harte, Naomi},
+  booktitle={Proceedings of the 13th International Conference on Language Resources and Evaluation (LREC 2022)},
+  pages={},
+  year={2022},
+  address={Marseille, France}
+}
+```

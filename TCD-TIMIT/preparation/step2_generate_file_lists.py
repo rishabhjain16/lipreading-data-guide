@@ -16,6 +16,15 @@ import pandas as pd
 from pathlib import Path
 from collections import defaultdict
 import random
+import re
+
+def clean_text(text):
+    """Clean text by removing punctuation symbols"""
+    # Remove punctuation like -- : - " ' , . ! ? ; etc.
+    text = re.sub(r'[":,\.\!\?\;\-\'\(\)\[\]\{\}]', '', text)
+    # Replace multiple spaces with single space
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
 def detect_crop_type(data_dir):
     """Detect crop type from directory name suffix"""
@@ -57,13 +66,13 @@ def load_csv_data(labels_dir, crop_suffix):
         df = pd.read_csv(csv_path)
         
         for _, row in df.iterrows():
-            speaker_id = row['speaker_id']
+            speaker_id = row['speaker']
             video_path = row['video_path']
             transcript = row['transcript']
-            transcript_id = row['transcript_id']
+            video_id = row['video_id']
             
             # Extract relative path from video_path
-            # video_path format: "tcd_timit_video_seg16s_face_224x224/volunteers/01M/sa1.mp4"
+            # video_path format: "tcd_timit_video/volunteers/01M/sa1.mp4"
             # We want: "volunteers/01M/sa1"
             path_parts = video_path.split('/')
             if len(path_parts) >= 4:  # [dataset_dir, subset, speaker, file.mp4]
@@ -204,7 +213,8 @@ def main():
     
     with open(label_list_path, 'w') as f:
         for label in labels:
-            f.write(f"{label}\n")
+            cleaned_label = clean_text(label)
+            f.write(f"{cleaned_label}\n")
     
     # Write split files
     split_files = {
