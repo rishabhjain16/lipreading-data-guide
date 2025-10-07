@@ -103,7 +103,10 @@ if args.detector == "retinaface":
     from detectors.retinaface.detector import LandmarksDetector
     from detectors.retinaface.video_process import VideoProcess
     
-    landmarks_detector = LandmarksDetector(device="cuda:0" if torch.cuda.is_available() else "cpu")
+    landmarks_detector = LandmarksDetector(
+        device="cuda:0" if torch.cuda.is_available() else "cpu",
+        threshold=0.3  # Lowered from default 0.8 to handle challenging side views
+    )
     
     # Get the absolute path to the mean face file
     script_dir = Path(__file__).parent

@@ -113,6 +113,7 @@ class VideoProcess:
                 transformed_landmarks[self.start_idx : self.stop_idx],
                 self.crop_height // 2,
                 self.crop_width // 2,
+                threshold=50,  # Increased from default 5 to handle off-center faces
             )
             sequence.append(patch)
         return np.array(sequence)
