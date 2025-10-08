@@ -13,14 +13,24 @@ import warnings
 warnings.filterwarnings("ignore")
 
 def clean_transcript(text):
-    """Remove disfluency markers from RoomReader transcripts"""
+    """Remove disfluency markers and non-English annotations from RoomReader transcripts"""
     if not text or text.strip() == "":
         return ""
     
-    # Remove $ and $# markers with surrounding spaces
+    # Remove $ and $# markers with surrounding spaces (RoomReader specific)
     text = re.sub(r'\s*\$[#]?\s*', ' ', text)
-    # Remove # markers with surrounding spaces  
+    # Remove # markers with surrounding spaces (RoomReader specific)
     text = re.sub(r'\s*#\s*', ' ', text)
+    
+    # Remove common punctuation and non-English annotations (keeping apostrophes)
+    # Remove: : , . ! ? ; - " ( ) [ ] { } @ % < >
+    text = re.sub(r'[:,.!?;\-"()\[\]{}<>@%]', '', text)
+    # Remove double dashes and ellipsis
+    text = re.sub(r'--+|\.\.\.+', ' ', text)
+    
+    # Convert to lowercase for consistency
+    text = text.lower()
+    
     # Clean up multiple spaces
     text = re.sub(r'\s+', ' ', text)
     return text.strip()

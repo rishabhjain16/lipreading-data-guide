@@ -19,6 +19,25 @@ from tqdm import tqdm
 from pathlib import Path
 from collections import defaultdict
 import random
+import re
+
+def clean_transcript(text):
+    """Clean transcript text by removing punctuation and normalizing"""
+    if not text or text.strip() == "":
+        return ""
+    
+    # Remove common punctuation (keeping apostrophes)
+    # Remove: : , . ! ? ; - " ( ) [ ] { } @ % < >
+    text = re.sub(r'[:,.!?;\-"()\[\]{}<>@%]', '', text)
+    # Remove double dashes and ellipsis
+    text = re.sub(r'--+|\.\.\.+', ' ', text)
+    
+    # Convert to lowercase for consistency
+    text = text.lower()
+    
+    # Clean up multiple spaces
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
 def detect_crop_type(data_dir):
     """Detect crop type from directory name suffix"""
@@ -43,15 +62,38 @@ def load_csv_data(labels_dir, crop_suffix):
     print(f"📄 Found CSV files: {csv_files}")
     
     all_data = []
+    conversational_data = []
+    individual_data = []
+    
     for csv_file in csv_files:
         csv_path = labels_dir / csv_file
         print(f"📊 Loading: {csv_path}")
         
         df = pd.read_csv(csv_path)
-        all_data.extend(df.to_dict('records'))
+        records = df.to_dict('records')
+        all_data.extend(records)
+        
+        # Separate by mode based on CSV filename or video_path
+        if 'conversational' in csv_file.lower():
+            conversational_data.extend(records)
+        elif 'individual' in csv_file.lower():
+            individual_data.extend(records)
+        else:
+            # Check video_path for mode identification
+            for record in records:
+                if 'conversational' in record.get('video_path', '').lower():
+                    conversational_data.append(record)
+                elif 'individual' in record.get('video_path', '').lower():
+                    individual_data.append(record)
+                else:
+                    # Default to individual if unclear
+                    individual_data.append(record)
     
     print(f"✅ Loaded {len(all_data)} records total")
-    return all_data
+    print(f"   📞 Conversational: {len(conversational_data)} records")
+    print(f"   👤 Individual: {len(individual_data)} records")
+    
+    return all_data, conversational_data, individual_data
 
 def split_data_by_speaker(data, split_ratios, seed=42, force_random=False):
     """Split data by speaker to ensure no speaker overlap between splits"""
@@ -186,7 +228,7 @@ def generate_training_manifests(data_dir, splits, metadata_dir, crop_suffix):
                         'audio_path': str(audio_path.absolute()),
                         'frame_count': frame_count,
                         'audio_frames': audio_frames,
-                        'transcript': record['transcript']
+                        'transcript': clean_transcript(record['transcript'])
                     })
                 else:
                     print(f"⚠️ Warning: Invalid frame count for {video_path}")
@@ -238,6 +280,8 @@ def main():
                         help='Random seed for reproducible splits')
     parser.add_argument('--random-split', action='store_true',
                         help='Use random splitting instead of speaker-based splitting (for testing)')
+    parser.add_argument('--create-mode-splits', action='store_true',
+                        help='Create separate metadata folders for conversational and individual modes')
     
     args = parser.parse_args()
     
@@ -283,20 +327,54 @@ def main():
     try:
         # Load CSV data and create splits
         print(f"\n🚀 Loading data and creating splits...")
-        all_data = load_csv_data(labels_dir, crop_suffix)
+        all_data, conversational_data, individual_data = load_csv_data(labels_dir, crop_suffix)
         
-        if args.random_split:
-            splits = split_data_randomly(all_data, split_ratios, args.seed)
+        if args.create_mode_splits:
+            # Create separate metadata folders for each mode
+            modes_data = {
+                'conversational': conversational_data,
+                'individual': individual_data
+            }
+            
+            for mode_name, mode_data in modes_data.items():
+                if not mode_data:
+                    print(f"⚠️ Warning: No {mode_name} data found, skipping...")
+                    continue
+                
+                print(f"\n🎯 Processing {mode_name} mode ({len(mode_data)} samples)...")
+                mode_metadata_dir = metadata_dir.parent / f"metadata_{mode_name}"
+                
+                if args.random_split:
+                    splits = split_data_randomly(mode_data, split_ratios, args.seed)
+                else:
+                    splits = split_data_by_speaker(mode_data, split_ratios, args.seed)
+                
+                # Generate training manifests for this mode
+                generate_training_manifests(data_dir, splits, mode_metadata_dir, crop_suffix)
+                
+                print(f"✅ {mode_name.capitalize()} mode completed!")
+                print(f"📁 Manifests created in: {mode_metadata_dir}")
         else:
-            splits = split_data_by_speaker(all_data, split_ratios, args.seed)
-        
-        # Generate training manifests (.tsv and .wrd files)
-        generate_training_manifests(data_dir, splits, metadata_dir, crop_suffix)
+            # Original behavior - process all data together
+            if args.random_split:
+                splits = split_data_randomly(all_data, split_ratios, args.seed)
+            else:
+                splits = split_data_by_speaker(all_data, split_ratios, args.seed)
+            
+            # Generate training manifests (.tsv and .wrd files)
+            generate_training_manifests(data_dir, splits, metadata_dir, crop_suffix)
         
         print(f"\n✅ RoomReader Step 2 completed successfully!")
-        print(f"� Training manifests created in: {metadata_dir}")
-        print(f"   • Manifests: train.tsv, valid.tsv, test.tsv")
-        print(f"   • Word files: train.wrd, valid.wrd, test.wrd")
+        if args.create_mode_splits:
+            print(f"📁 Mode-specific manifests created:")
+            if conversational_data:
+                print(f"   📞 Conversational: {metadata_dir.parent}/metadata_conversational/")
+            if individual_data:
+                print(f"   👤 Individual: {metadata_dir.parent}/metadata_individual/")
+        else:
+            print(f"📁 Combined manifests created in: {metadata_dir}")
+            print(f"   • Manifests: train.tsv, valid.tsv, test.tsv")
+            print(f"   • Word files: train.wrd, valid.wrd, test.wrd")
         
         return 0
         

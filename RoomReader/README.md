@@ -167,6 +167,12 @@ The script generates a CSV file with detailed metadata including:
 - Maintains stable lip/face position throughout utterance
 - Handles variable video quality from online recordings
 
+**Text Preprocessing:**
+- Removes RoomReader-specific disfluency markers ($ and # symbols)
+- Strips punctuation and special characters (: , . ! ? ; - ' " ( ) [ ] { } etc.)
+- Converts to lowercase for consistency
+- Normalizes whitespace and removes empty utterances
+
 **Data Modes:**
 - `individual`: Participant speaks alone (clean audio for training)
 - `conversational`: Participant speaks with others present (realistic noisy conditions)
@@ -188,6 +194,7 @@ The script generates a CSV file with detailed metadata including:
 - **Accuracy**: Manually corrected ASR transcriptions
 - **Annotations**: Disfluencies, feedback, paralinguistic elements
 - **Format**: TextGrid, ELAN, and plain text
+- **Text Cleaning**: Automatic removal of disfluency markers ($, #) and punctuation for clean training data
 
 ## Getting Started
 
@@ -256,6 +263,13 @@ ls /path/to/output/roomreader_video_lips/individual/S01/
      --output-path ./roomreader_processed \
      --video-mode conversational \
      --crop-type lips
+   
+   # Generate separate training manifests for each mode
+   python step2.py \
+     --roomreader-data-dir ./roomreader_processed/roomreader_video \
+     --metadata-dir ./roomreader_processed/metadata \
+     --split-ratios 0.7,0.15,0.15 \
+     --create-mode-splits
    ```
 
 4. **Verify Output**:
@@ -301,22 +315,36 @@ Creates LRS-compatible training manifests (.tsv and .wrd files) for use with sta
 - Speaker-based or random data splitting
 - Frame counting with OpenCV for accurate manifest data
 - Progress tracking with tqdm
+- **Mode-specific splits**: Separate metadata folders for conversational vs individual speech
 
 **Usage:**
 ```bash
-# Random split
+# Create separate metadata folders for conversational and individual modes
+python step2.py \
+  --roomreader-data-dir /path/to/processed/data \
+  --metadata-dir /path/to/manifests \
+  --split-ratios 0.7,0.15,0.15 \
+  --create-mode-splits
+
+# Random split (all data combined)
 python step2.py \
   --roomreader-data-dir /path/to/processed/data \
   --metadata-dir /path/to/manifests \
   --split-ratios 0.7,0.15,0.15 \
   --random-split
 
-# Speaker-based split
+# Speaker-based split (all data combined)
 python step2.py \
   --roomreader-data-dir /path/to/processed/data \
   --metadata-dir /path/to/manifests \
   --split-ratios 0.7,0.15,0.15
 ```
+
+**Arguments:**
+- `--create-mode-splits`: Creates separate `metadata_conversational/` and `metadata_individual/` folders
+- `--random-split`: Use random splitting instead of speaker-based splitting
+- `--split-ratios`: Train/validation/test ratios (default: 0.7,0.15,0.15)
+- `--seed`: Random seed for reproducible splits (default: 42)
 
 ## Output Format
 
@@ -324,6 +352,21 @@ The pipeline generates LRS-compatible files:
 - **Manifest files (.tsv)**: Tab-separated values with file paths, frame counts, and audio information
 - **Word files (.wrd)**: Plain text transcriptions corresponding to each video segment
 - **Directory structure**: Organized by session and speaker for easy navigation
+- **Mode separation**: Individual vs conversational audio conditions for targeted training
+
+### Training Scenarios
+
+**Individual Mode**: Clean audio conditions
+- Single speaker talking alone
+- Minimal background noise
+- Ideal for initial model training
+- Better for learning visual-audio correspondences
+
+**Conversational Mode**: Realistic noisy conditions  
+- Multiple speakers present
+- Background conversations
+- More challenging evaluation scenario
+- Better for robust model testing
 
 ## Complete Output Structure
 
@@ -332,35 +375,35 @@ After running the full pipeline, your output directory will have the following s
 ```
 output_path/
 ├── roomreader_video/
-│   └── individual/                           # Processed video segments
+│   ├── individual/                         # Clean audio (speaker alone)
+│   │   ├── S01/
+│   │   │   ├── S01_spk0_001.mp4          # 96x96 lip crops (or 224x224 face)
+│   │   │   ├── S01_spk0_001.wav          # 16kHz clean audio segments
+│   │   │   ├── S01_spk0_001.txt          # Clean text transcripts
+│   │   │   └── ...
+│   │   └── S02/, S03/, ..., S30/         # All 30 sessions
+│   └── conversational/                     # Noisy audio (multiple speakers)
 │       ├── S01/
-│       │   ├── S01_spk0_001.mp4            # 96x96 lip crops (or 224x224 face)
-│       │   ├── S01_spk0_001.wav            # 16kHz audio segments
-│       │   ├── S01_spk0_001.txt            # Clean text transcripts
-│       │   ├── S01_spk0_002.mp4
-│       │   ├── S01_spk0_002.wav
-│       │   ├── S01_spk0_002.txt
-│       │   ├── S01_spk1_001.mp4            # Different speaker (spk1)
-│       │   ├── S01_spk1_001.wav
-│       │   ├── S01_spk1_001.txt
+│       │   ├── S01_spk0_001.mp4          # Same video crops
+│       │   ├── S01_spk0_001.wav          # 16kHz noisy audio (background speakers)
+│       │   ├── S01_spk0_001.txt          # Same transcripts
 │       │   └── ...
-│       ├── S02/
-│       │   ├── S02_spk0_001.mp4
-│       │   ├── S02_spk0_001.wav
-│       │   ├── S02_spk0_001.txt
-│       │   └── ...
-│       └── S03/, S04/, ..., S30/           # All 30 sessions
+│       └── S02/, S03/, ..., S30/
 │
 ├── labels/
-│   └── roomreader_individual.csv           # Processing metadata
+│   ├── roomreader_individual.csv          # Individual mode metadata
+│   └── roomreader_conversational.csv      # Conversational mode metadata
 │
-└── manifests/                              # Training manifests (from step2)
-    ├── train.tsv                           # Training manifest
-    ├── train.wrd                           # Training transcripts
-    ├── valid.tsv                           # Validation manifest
-    ├── valid.wrd                           # Validation transcripts
-    ├── test.tsv                            # Test manifest
-    └── test.wrd                            # Test transcripts
+└── manifests/                             # Training manifests (from step2)
+    ├── metadata_individual/               # Individual mode manifests
+    │   ├── train.tsv, valid.tsv, test.tsv
+    │   └── train.wrd, valid.wrd, test.wrd
+    ├── metadata_conversational/           # Conversational mode manifests
+    │   ├── train.tsv, valid.tsv, test.tsv
+    │   └── train.wrd, valid.wrd, test.wrd
+    └── metadata/                          # Combined manifests (if not using --create-mode-splits)
+        ├── train.tsv, valid.tsv, test.tsv
+        └── train.wrd, valid.wrd, test.wrd
 ```
 
 ### File Naming Convention
