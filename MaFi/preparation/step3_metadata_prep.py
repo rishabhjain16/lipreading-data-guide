@@ -157,8 +157,10 @@ with open(manifest_path, 'w') as f:
     # Write entries
     for fid, num_frames in zip(valid_fids, video_num_frames):
         video_path = data_dir / f"{fid}.mp4"
-        # Format: id, video_path, num_frames
-        f.write(f"{fid}\t{video_path}\t{num_frames}\n")
+        audio_path = data_dir / f"{fid}.wav"
+        # Format: id, video_path, audio_path, num_frames
+        # MaFi is silent dataset, audio_path points to .wav files (same location as video)
+        f.write(f"{fid}\t{video_path}\t{audio_path}\t{num_frames}\n")
 
 print(f"✅ Created manifest: {manifest_path} ({len(valid_fids)} entries)")
 

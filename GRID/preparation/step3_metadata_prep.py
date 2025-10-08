@@ -247,8 +247,8 @@ for split_name, indices in splits.items():
             num_audio = audio_num_frames[idx]
             num_video = video_num_frames[idx]
             
-            # Format: id, video_path, audio_path, num_audio_frames, num_video_frames
-            f.write(f"{fid}\t{video_path}\t{audio_path}\t{num_audio}\t{num_video}\n")
+            # Format: id, video_path, audio_path, num_video_frames, num_audio_frames
+            f.write(f"{fid}\t{video_path}\t{audio_path}\t{num_video}\t{num_audio}\n")
     
     with open(wrd_path, 'w') as f:
         for idx in indices:
