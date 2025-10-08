@@ -12,6 +12,8 @@ Complete preprocessing pipeline for GRID Corpus - a large multitalker audiovisua
 - **Video format**: 360x288, 25 fps, MPG files
 - **Duration**: ~3 seconds per video
 
+**Note**: Some files may be skipped during preprocessing due to corrupted video files or empty videos. This is expected behavior and the pipeline will continue processing remaining files.
+
 ## Quick Start
 
 ```bash

@@ -14,6 +14,8 @@ Complete preprocessing pipeline for Lombard GRID - an audiovisual speech corpus 
 - **Duration**: ~2.5 seconds per video
 - **Views**: Front and side camera angles
 
+**Note**: Some files may be skipped during preprocessing due to corrupted video files or empty videos. This is expected behavior and the pipeline will continue processing remaining files.
+
 ## Quick Start
 
 ```bash

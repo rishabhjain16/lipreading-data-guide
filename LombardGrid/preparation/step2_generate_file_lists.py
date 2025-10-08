@@ -36,23 +36,52 @@ args = parser.parse_args()
 
 data_dir = Path(args.lombardgrid_data_dir)
 
-# Determine which speakers to process
-if args.speaker:
-    speakers = [args.speaker]
-    output_suffix = f"_{args.speaker}"
-else:
-    speakers = sorted([d.name for d in data_dir.iterdir() 
-                      if d.is_dir() and d.name.startswith('s') and d.name[1:].isdigit()])
-    output_suffix = ""
+# Check if we have front/side structure or direct speaker structure
+has_view_dirs = (data_dir / "front").exists() or (data_dir / "side").exists()
 
-# Collect all video files
-video_files = []
-for speaker in speakers:
-    speaker_dir = data_dir / speaker
-    if speaker_dir.exists():
-        videos = sorted(speaker_dir.glob("*.mp4"))
-        video_files.extend(videos)
-        print(f"Found {len(videos)} videos for speaker {speaker}")
+if has_view_dirs:
+    # Process front and side views
+    view_dirs = [d for d in ["front", "side"] if (data_dir / d).exists()]
+    print(f"Found view directories: {view_dirs}")
+    
+    # Determine which speakers to process
+    if args.speaker:
+        speakers = [args.speaker]
+        output_suffix = f"_{args.speaker}"
+    else:
+        # Get speakers from first available view
+        first_view = data_dir / view_dirs[0]
+        speakers = sorted([d.name for d in first_view.iterdir() 
+                          if d.is_dir() and d.name.startswith('s') and d.name[1:].isdigit()])
+        output_suffix = ""
+    
+    # Collect all video files
+    video_files = []
+    for view in view_dirs:
+        for speaker in speakers:
+            speaker_dir = data_dir / view / speaker
+            if speaker_dir.exists():
+                videos = sorted(speaker_dir.glob("*.mp4"))
+                video_files.extend(videos)
+                print(f"Found {len(videos)} videos for {view}/{speaker}")
+else:
+    # Original structure without view directories
+    if args.speaker:
+        speakers = [args.speaker]
+        output_suffix = f"_{args.speaker}"
+    else:
+        speakers = sorted([d.name for d in data_dir.iterdir() 
+                          if d.is_dir() and d.name.startswith('s') and d.name[1:].isdigit()])
+        output_suffix = ""
+    
+    # Collect all video files
+    video_files = []
+    for speaker in speakers:
+        speaker_dir = data_dir / speaker
+        if speaker_dir.exists():
+            videos = sorted(speaker_dir.glob("*.mp4"))
+            video_files.extend(videos)
+            print(f"Found {len(videos)} videos for speaker {speaker}")
 
 if not video_files:
     print(f"❌ Error: No video files found in {data_dir}")
@@ -75,7 +104,7 @@ for video_path in video_files:
     text_path = text_dir / rel_path.with_suffix('.txt')
     
     if not text_path.exists():
-        print(f"Warning: Text file not found for {video_path.name}")
+        print(f"Warning: Text file not found for {video_path.name}, skipping...")
         continue
     
     with open(text_path, 'r') as f:
