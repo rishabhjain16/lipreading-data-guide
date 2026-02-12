@@ -310,6 +310,10 @@ def generate_training_manifests(data_dir, splits, metadata_dir, crop_suffix):
     
     metadata_dir.mkdir(parents=True, exist_ok=True)
     
+    # Initialize skip log
+    skip_log_path = metadata_dir / 'skip.log'
+    skipped_files = []
+    
     for split_name, split_data in splits.items():
         if not split_data:
             print(f"⚠️ Warning: No data for {split_name} split")
@@ -329,10 +333,12 @@ def generate_training_manifests(data_dir, splits, metadata_dir, crop_suffix):
             
             if not video_path.exists():
                 print(f"⚠️ Warning: Video file not found: {video_path}")
+                skipped_files.append(f"Missing video: {video_path}")
                 continue
             
             if not audio_path.exists():
                 print(f"⚠️ Warning: Audio file not found: {audio_path}")
+                skipped_files.append(f"Missing audio: {audio_path}")
                 continue
             
             try:
@@ -357,9 +363,11 @@ def generate_training_manifests(data_dir, splits, metadata_dir, crop_suffix):
                     })
                 else:
                     print(f"⚠️ Warning: Invalid frame count for {video_path}")
+                    skipped_files.append(f"Invalid frame count: {video_path}")
             
             except Exception as e:
                 print(f"❌ Error processing {video_path}: {e}")
+                skipped_files.append(f"Processing error: {video_path} - {e}")
                 continue
         
         # Write .tsv file (following LRS format)
@@ -390,6 +398,15 @@ def generate_training_manifests(data_dir, splits, metadata_dir, crop_suffix):
             avg_duration = total_frames / (fps * len(valid_records))
             
             print(f"   📈 Stats: {total_frames:,} video frames, {total_audio:,} audio frames, {avg_duration:.1f}s avg")
+    
+    # Write skip log if any files were skipped
+    if skipped_files:
+        with open(skip_log_path, 'w') as f:
+            for skipped in skipped_files:
+                f.write(f"{skipped}\n")
+        print(f"\n⚠️  {len(skipped_files)} files skipped - see {skip_log_path}")
+    else:
+        print("\n✅ No files skipped")
 
 
 def main():
