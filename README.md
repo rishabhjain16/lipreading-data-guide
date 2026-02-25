@@ -52,3 +52,19 @@ Each dataset folder includes comprehensive documentation with step-by-step instr
 11. **MultiVSR**: Prajwal, K. R., Hegde, S., & Zisserman, A. (2025). Scaling Multilingual Visual Speech Recognition. *ICASSP 2025 - IEEE International Conference on Acoustics, Speech and Signal Processing*, 1-5. [https://github.com/Sindhu-Hegde/multivsr](https://github.com/Sindhu-Hegde/multivsr)
 
 12. **Candor**: Reece, A., Cooney, G., Bull, P., & Chung, C. (2023). The CANDOR corpus: Insights from a large multimodal dataset of naturalistic conversation. *Science Advances*, 9, eadf3197. [https://www.science.org/doi/10.1126/sciadv.adf3197](https://www.science.org/doi/10.1126/sciadv.adf3197)
+
+
+
+## Codebase References
+
+#### 1. AV-HuBERT
+Shi, B., Hsu, W.-N., Lakhotia, K., & Mohamed, A. (2022).  
+**Learning Audio-Visual Speech Representation by Masked Multimodal Cluster Prediction (AV-HuBERT)**.  
+Paper: https://arxiv.org/abs/2201.02184  
+GitHub: https://github.com/facebookresearch/av_hubert  
+
+#### 2. Auto-AVSR
+Ma, P., Haliassos, A., Fernandez-Lopez, A., Chen, H., Petridis, S., & Pantic, M. (2023).  
+**Auto-AVSR: Audio-Visual Speech Recognition with Automatic Labels**.  
+Paper: https://arxiv.org/abs/2303.14307  
+GitHub: https://github.com/mpc001/auto_avsr
