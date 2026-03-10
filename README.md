@@ -4,19 +4,26 @@ A comprehensive toolkit for preparing popular lip reading and visual speech reco
 
 ## Supported Datasets
 
-- **LRS2**: Preparation and processing scripts for the Lip Reading Sentences 2 dataset
-- **LRS3**: Preparation and processing scripts for the Lip Reading Sentences 3 dataset
-- **LRS_Combined**: Utilities to merge prepared LRS2 and LRS3 datasets into a single corpus
-- **TCD-TIMIT**: Processing pipeline for the TCD-TIMIT audiovisual speech corpus
-- **WildVSR**: Preparation scripts for the Wild Visual Speech Recognition dataset
-- **Voxceleb2**: Processing tools for the VoxCeleb2 speaker recognition dataset
-- **AVCocktail and AVYT**: WebDataset format preparation for AVCocktail and MCOREC challenge datasets
-- **Muavic**: Modified preprocessing compatible with RetinaFace and AutoAVSR pipelines (see Muavic folder for details)
-- **Grid**: Processing with adjusted RetinaFace thresholds for better face region and landmark coverage (see folder for details)
-- **Lombard Grid**: Specialized preprocessing with optimized RetinaFace parameters for Lombard effect speech (see folder for details)
-- **RoomReader**: Work in progress - segment concatenation improvements needed to handle fragmentation
-- **MultiVSR**: Large-scale multilingual VSR dataset - planned for future support due to dataset size
-- **Candor**: Under consideration for future integration
+| Dataset | Status | Description | Size | Key Features |
+|---------|--------|-------------|------|--------------|
+| **LRS2** | ✅ Ready | Lip Reading Sentences 2 | ~140k utterances | BBC broadcasts, in-the-wild |
+| **LRS3** | ✅ Ready | Lip Reading Sentences 3 | ~150k utterances | TED talks, high quality |
+| **LRS_Combined** | ✅ Ready | Merged LRS2 + LRS3 | ~290k utterances | Unified corpus |
+| **TCD-TIMIT** | ✅ Ready | TCD-TIMIT audiovisual corpus | ~27k utterances | HD video, controlled, 2 camera angles |
+| **GRID** | ✅ Ready | Audio-visual speech corpus | ~34k utterances | Controlled vocabulary, 34 speakers |
+| **LombardGrid** | ✅ Ready | Lombard effect speech | ~5.4k utterances | Noisy conditions, 54 speakers |
+| **RoomReader** | ✅ Ready | Multiparty conversations | ~322 videos | Online meetings, 118 participants |
+| **Candor** | ✅ Ready | Naturalistic conversations | ~1,656 conversations | Unscripted dyadic conversations |
+| **VoxCeleb2** | ✅ Ready | Speaker recognition dataset | ~1M utterances | Large-scale, in-the-wild |
+| **WildVSR** | ✅ Ready | Wild VSR test set | Test set | Generalization benchmark |
+| **AVCocktail** | ✅ Ready | Cocktail party speech | Challenge dataset | Multi-speaker, noisy |
+| **Muavic** | ⚠️ Experimental | Multilingual audio-visual | 9 languages | Speech recognition + translation |
+| **MultiVSR** | 🔄 Planned | Large-scale multilingual VSR | ~1,400 hours | 20+ languages |
+
+**Legend:**
+- ✅ Ready: Fully tested and can be used with AV-HuBERT and Auto-AVSR.
+- ⚠️ Experimental: Available but not fully tested
+- 🔄 Planned: Future support planned
 
 ## Utilities
 
@@ -51,7 +58,7 @@ Each dataset folder includes comprehensive documentation with step-by-step instr
 
 11. **MultiVSR**: Prajwal, K. R., Hegde, S., & Zisserman, A. (2025). Scaling Multilingual Visual Speech Recognition. *ICASSP 2025 - IEEE International Conference on Acoustics, Speech and Signal Processing*, 1-5. [https://github.com/Sindhu-Hegde/multivsr](https://github.com/Sindhu-Hegde/multivsr)
 
-12. **Candor**: Reece, A., Cooney, G., Bull, P., & Chung, C. (2023). The CANDOR corpus: Insights from a large multimodal dataset of naturalistic conversation. *Science Advances*, 9, eadf3197. [https://www.science.org/doi/10.1126/sciadv.adf3197](https://www.science.org/doi/10.1126/sciadv.adf3197)
+12. **Candor**: Reece, A., Cooney, G., Bull, P., & Chung, C. (2023). The CANDOR corpus: Insights from a large multimodal dataset of naturalistic conversation. *Science Advances*, 9, eadf3197. [https://www.science.org/doi/10.1126/sciadv.adf3197](https://www.science.org/doi/10.1126/sciadv.adf3197) | [https://candor.usc.edu/](https://candor.usc.edu/)
 
 
 
