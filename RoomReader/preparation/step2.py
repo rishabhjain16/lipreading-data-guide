@@ -1,14 +1,29 @@
 #!/usr/bin/env python3
 """
-RoomReader Step 2: Generate Training Manifests
+RoomReader Step 2: Generate Manifests
 
-This script generates the training manifests from processed RoomReader data:
-- Generates train.tsv, valid.tsv, test.tsv files (video metadata)
-- Generates train.wrd, valid.wrd, test.wrd files (transcripts)
-- Counts frames and creates detailed metadata
+This script generates manifests from processed RoomReader data.
+
+Default behavior (no --split-ratios):
+- Creates test-only manifests in three folders: conversational/, individual/, combined/
+- All data treated as test data (no train/val splits)
+
+With --split-ratios:
+- Creates train/valid/test splits with the specified ratios
+- Can use --create-mode-splits to separate conversational and individual modes
 
 Usage:
-    python step2.py --roomreader-data-dir /path/to/processed/roomreader_video --metadata-dir /path/to/metadata --split-ratios 0.7,0.15,0.15
+    # Default: Create test-only manifests for all three modes
+    python step2.py \
+        --roomreader-data-dir /path/to/processed/roomreader_video \
+        --metadata-dir /path/to/metadata
+
+    # With splits: Create train/val/test splits
+    python step2.py \
+        --roomreader-data-dir /path/to/processed/roomreader_video \
+        --metadata-dir /path/to/metadata \
+        --split-ratios 0.7,0.15,0.15 \
+        --create-mode-splits
 """
 
 import os
@@ -274,8 +289,8 @@ def main():
                         help='RoomReader processed data directory (contains video files)')
     parser.add_argument('--metadata-dir', type=str, required=True,
                         help='Directory where metadata files will be created')
-    parser.add_argument('--split-ratios', type=str, default='0.7,0.15,0.15',
-                        help='Train/val/test split ratios (comma-separated)')
+    parser.add_argument('--split-ratios', type=str, default=None,
+                        help='Train/val/test split ratios (comma-separated). If not provided, creates test-only manifests')
     parser.add_argument('--seed', type=int, default=42,
                         help='Random seed for reproducible splits')
     parser.add_argument('--random-split', action='store_true',
@@ -285,13 +300,14 @@ def main():
     
     args = parser.parse_args()
     
-    # Parse split ratios
-    ratios = [float(x) for x in args.split_ratios.split(',')]
-    if len(ratios) != 3 or abs(sum(ratios) - 1.0) > 0.001:
-        print("❌ Error: Split ratios must be three numbers that sum to 1.0")
-        return 1
-    
-    split_ratios = {'train': ratios[0], 'valid': ratios[1], 'test': ratios[2]}
+    # Parse split ratios (optional)
+    split_ratios = None
+    if args.split_ratios:
+        ratios = [float(x) for x in args.split_ratios.split(',')]
+        if len(ratios) != 3 or abs(sum(ratios) - 1.0) > 0.001:
+            print("❌ Error: Split ratios must be three numbers that sum to 1.0")
+            return 1
+        split_ratios = {'train': ratios[0], 'valid': ratios[1], 'test': ratios[2]}
     
     # Validate input directory
     data_dir = Path(args.roomreader_data_dir).resolve()
@@ -309,7 +325,10 @@ def main():
     print(f"📁 Data directory: {data_dir}")
     print(f"📊 Metadata directory: {metadata_dir}")
     print(f"✂️ Crop type: {crop_type}")
-    print(f"📈 Split ratios: {split_ratios}")
+    if split_ratios:
+        print(f"📈 Split ratios: {split_ratios}")
+    else:
+        print(f"📈 Mode: Test-only manifests (no train/val splits)")
     
     # Find labels directory
     labels_dir = None
@@ -325,56 +344,88 @@ def main():
         return 1
     
     try:
-        # Load CSV data and create splits
-        print(f"\n🚀 Loading data and creating splits...")
+        # Load CSV data
+        print(f"\n🚀 Loading data...")
         all_data, conversational_data, individual_data = load_csv_data(labels_dir, crop_suffix)
         
-        if args.create_mode_splits:
-            # Create separate metadata folders for each mode
-            modes_data = {
-                'conversational': conversational_data,
-                'individual': individual_data
-            }
+        # Default behavior: Create test-only manifests for three modes
+        if not split_ratios:
+            print(f"\n📋 Creating test-only manifests for all modes...")
             
-            for mode_name, mode_data in modes_data.items():
-                if not mode_data:
-                    print(f"⚠️ Warning: No {mode_name} data found, skipping...")
-                    continue
-                
-                print(f"\n🎯 Processing {mode_name} mode ({len(mode_data)} samples)...")
-                mode_metadata_dir = metadata_dir.parent / f"metadata_{mode_name}"
-                
-                if args.random_split:
-                    splits = split_data_randomly(mode_data, split_ratios, args.seed)
-                else:
-                    splits = split_data_by_speaker(mode_data, split_ratios, args.seed)
-                
-                # Generate training manifests for this mode
-                generate_training_manifests(data_dir, splits, mode_metadata_dir, crop_suffix)
-                
-                print(f"✅ {mode_name.capitalize()} mode completed!")
-                print(f"📁 Manifests created in: {mode_metadata_dir}")
-        else:
-            # Original behavior - process all data together
-            if args.random_split:
-                splits = split_data_randomly(all_data, split_ratios, args.seed)
-            else:
-                splits = split_data_by_speaker(all_data, split_ratios, args.seed)
-            
-            # Generate training manifests (.tsv and .wrd files)
-            generate_training_manifests(data_dir, splits, metadata_dir, crop_suffix)
-        
-        print(f"\n✅ RoomReader Step 2 completed successfully!")
-        if args.create_mode_splits:
-            print(f"📁 Mode-specific manifests created:")
+            # Create conversational metadata
             if conversational_data:
-                print(f"   📞 Conversational: {metadata_dir.parent}/metadata_conversational/")
+                conversational_dir = metadata_dir / "conversational"
+                generate_test_manifest(data_dir, conversational_data, conversational_dir, "conversational")
+            
+            # Create individual metadata
             if individual_data:
-                print(f"   👤 Individual: {metadata_dir.parent}/metadata_individual/")
+                individual_dir = metadata_dir / "individual"
+                generate_test_manifest(data_dir, individual_data, individual_dir, "individual")
+            
+            # Create combined metadata
+            combined_dir = metadata_dir / "combined"
+            generate_test_manifest(data_dir, all_data, combined_dir, "combined")
+            
+            print(f"\n{'='*60}")
+            print(f"✅ RoomReader Step 2 completed successfully!")
+            print(f"{'='*60}")
+            print(f"\nTest-only manifests created:")
+            if conversational_data:
+                print(f"  📞 Conversational ({len(conversational_data)} files): {metadata_dir}/conversational/")
+            if individual_data:
+                print(f"  👤 Individual ({len(individual_data)} files): {metadata_dir}/individual/")
+            print(f"  🔗 Combined ({len(all_data)} files): {metadata_dir}/combined/")
+        
+        # With split ratios: Create train/val/test splits
         else:
-            print(f"📁 Combined manifests created in: {metadata_dir}")
-            print(f"   • Manifests: train.tsv, valid.tsv, test.tsv")
-            print(f"   • Word files: train.wrd, valid.wrd, test.wrd")
+            print(f"\n📋 Creating train/val/test splits...")
+            
+            if args.create_mode_splits:
+                # Create separate metadata folders for each mode
+                modes_data = {
+                    'conversational': conversational_data,
+                    'individual': individual_data
+                }
+                
+                for mode_name, mode_data in modes_data.items():
+                    if not mode_data:
+                        print(f"⚠️ Warning: No {mode_name} data found, skipping...")
+                        continue
+                    
+                    print(f"\n🎯 Processing {mode_name} mode ({len(mode_data)} samples)...")
+                    mode_metadata_dir = metadata_dir.parent / f"metadata_{mode_name}"
+                    
+                    if args.random_split:
+                        splits = split_data_randomly(mode_data, split_ratios, args.seed)
+                    else:
+                        splits = split_data_by_speaker(mode_data, split_ratios, args.seed)
+                    
+                    # Generate training manifests for this mode
+                    generate_training_manifests(data_dir, splits, mode_metadata_dir, crop_suffix)
+                    
+                    print(f"✅ {mode_name.capitalize()} mode completed!")
+                    print(f"📁 Manifests created in: {mode_metadata_dir}")
+                
+                print(f"\n✅ RoomReader Step 2 completed successfully!")
+                print(f"📁 Mode-specific manifests created:")
+                if conversational_data:
+                    print(f"   📞 Conversational: {metadata_dir.parent}/metadata_conversational/")
+                if individual_data:
+                    print(f"   👤 Individual: {metadata_dir.parent}/metadata_individual/")
+            else:
+                # Original behavior - process all data together
+                if args.random_split:
+                    splits = split_data_randomly(all_data, split_ratios, args.seed)
+                else:
+                    splits = split_data_by_speaker(all_data, split_ratios, args.seed)
+                
+                # Generate training manifests (.tsv and .wrd files)
+                generate_training_manifests(data_dir, splits, metadata_dir, crop_suffix)
+                
+                print(f"\n✅ RoomReader Step 2 completed successfully!")
+                print(f"📁 Combined manifests created in: {metadata_dir}")
+                print(f"   • Manifests: train.tsv, valid.tsv, test.tsv")
+                print(f"   • Word files: train.wrd, valid.wrd, test.wrd")
         
         return 0
         

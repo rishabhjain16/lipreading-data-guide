@@ -41,7 +41,6 @@ python preparation/step2_generate_file_lists.py \
 python preparation/step3_metadata_prep.py \
     --lombardgrid-data-dir /media/rishabhjain/SSD/LombardGrid_Clean/lombardgrid_video \
     --metadata-dir /media/rishabhjain/SSD/LombardGrid_Clean/metadata \
-    --split-ratios 0.7,0.15,0.15 \
     --vocab-size 100
 ```
 
@@ -111,10 +110,18 @@ python preparation/step3_metadata_prep.py \
 │   ├── lombardgrid_front.csv                # Front view all speakers (~2,700 videos)
 │   └── lombardgrid_side.csv                 # Side view all speakers (~2,700 videos)
 └── metadata/                                # Training Manifests (optional)
-    ├── train.tsv, valid.tsv, test.tsv
-    ├── train.wrd, valid.wrd, test.wrd
-    ├── dict.wrd.txt
-    └── spm100/
+    ├── front/                               # Front view only
+    │   ├── test.tsv, test.wrd
+    │   ├── dict.wrd.txt
+    │   └── spm100/
+    ├── side/                                # Side view only
+    │   ├── test.tsv, test.wrd
+    │   ├── dict.wrd.txt
+    │   └── spm100/
+    └── combined/                            # Both front and side views
+        ├── test.tsv, test.wrd
+        ├── dict.wrd.txt
+        └── spm100/
 ```
 
 ## Options
@@ -125,12 +132,13 @@ python preparation/step3_metadata_prep.py \
 - `--groups`, `--job-index`: For parallel processing
 
 ### Step 2
-- `--speaker`: Process specific speaker (s2, s3, ..., s55) or omit for all
+- Generates `file.list` and `label.list` for all speakers and views
+- Optional `--speaker` flag to process only a specific speaker (e.g., s2)
 
 ### Step 3
-- `--speaker`: Process specific speaker or omit for all
-- `--split-ratios`: Train/val/test ratios (default: 0.7,0.15,0.15)
 - `--vocab-size`: Vocabulary size (default: 100)
+- Creates three metadata folders: `front/`, `side/`, and `combined/`
+- All data is placed in test manifests (no train/val split)
 
 ## Dependencies
 
@@ -148,3 +156,5 @@ pip install opencv-python pandas tqdm
 - Two main recording conditions: lombard (`_l_`) and plain noise (`_p_`)
 - Both front and side camera views available
 - Condition info preserved in filenames, not as separate folders
+- Step 3 creates separate metadata for front view, side view, and combined views
+- All data is treated as test data (no train/validation splits)
