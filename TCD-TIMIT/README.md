@@ -34,10 +34,16 @@ python preparation/step2_generate_file_lists.py \
     --tcd-data-dir /path/to/output/tcd_timit/tcd_timit_video \
     --seed 42
 
-# Step 3: Create metadata
+# Step 3: Create metadata (default: test-only manifests)
 python preparation/step3_metadata_prep.py \
     --tcd-data-dir /path/to/output/tcd_timit/tcd_timit_video \
     --metadata-dir /path/to/output/tcd_timit/metadata
+
+# Step 3: Create metadata with train/val/test splits (optional)
+python preparation/step3_metadata_prep.py \
+    --tcd-data-dir /path/to/output/tcd_timit/tcd_timit_video \
+    --metadata-dir /path/to/output/tcd_timit/metadata \
+    --use-splits
 ```
 
 ## Key Features
@@ -68,10 +74,20 @@ python preparation/step3_metadata_prep.py \
 
 ### Step 3: Metadata Generation
 - **Frame Counting**: Audio/video synchronization (`nframes.audio`, `nframes.video`)
-- **TSV Manifests**: LRS-compatible format with audio/video paths (`train.tsv`, `valid.tsv`, `test.tsv`)
-- **Word Files**: Text transcriptions (`train.wrd`, `valid.wrd`, `test.wrd`)
+- **TSV Manifests**: LRS-compatible format with audio/video paths
+- **Word Files**: Text transcriptions
 - **Vocabulary**: SentencePiece tokenization (`dict.wrd.txt`)
 - **Training Ready**: Compatible with LRS2/LRS3 training pipelines
+
+**Default Behavior (Test-Only Manifests):**
+Creates 9 metadata folders with test.tsv only:
+- `lipspeakers_30degcam/`, `lipspeakers_straightcam/`, `lipspeakers/`
+- `volunteers_30degcam/`, `volunteers_straightcam/`, `volunteers/`
+- `volunteers_30degcam_lipcompare/`, `volunteers_straightcam_lipcompare/` (female volunteers matched to lipspeakers data size for fair comparison)
+- `combined/` (all data)
+
+**With --use-splits Flag:**
+Uses existing train/val/test splits from step2 to create train.tsv, valid.tsv, test.tsv
 
 ## File Structure
 
@@ -93,8 +109,27 @@ output/
 │   │   ├── tcd_timit_volunteers_retinaface.csv
 │   │   └── tcd_timit_volunteers_face_224x224_retinaface.csv
 │   └── metadata/                                # Training Manifests
-│       ├── train.txt, val.txt, test.txt
-│       └── vocab files
+│       ├── lipspeakers_30degcam/               # Test-only manifests (default)
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       ├── lipspeakers_straightcam/
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       ├── lipspeakers/
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       ├── volunteers_30degcam/
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       ├── volunteers_straightcam/
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       ├── volunteers/
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       ├── volunteers_30degcam_lipcompare/     # Female volunteers matched to lipspeakers size
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       ├── volunteers_straightcam_lipcompare/
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       ├── combined/
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       └── (with --use-splits)                 # Train/val/test splits
+│           ├── train.tsv, valid.tsv, test.tsv
+│           └── train.wrd, valid.wrd, test.wrd
 ```
 
 ## Utility Scripts
@@ -128,6 +163,7 @@ python preparation/parse_mlf.py --mlf-file /path/to/file.mlf
 
 ### Step 3 Options
 - `--vocab-size`: SentencePiece vocabulary size (default: 1000)
+- `--use-splits`: Use existing train/val/test split files from step2 (default: create test-only manifests for 9 configurations)
 
 ## RetinaFace Processing
 
