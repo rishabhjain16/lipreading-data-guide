@@ -3,13 +3,32 @@
 TCD-TIMIT Step 3: Metadata Preparation
 
 This script counts frames and creates manifest files for TCD-TIMIT dataset.
-It follows the same pattern as LRS2/LRS3 but handles TCD-TIMIT's speaker-based splits.
+
+Default behavior:
+- Creates test-only manifests for multiple configurations:
+  - lipspeakers_30degcam/, lipspeakers_straightcam/, lipspeakers/ (combined cameras)
+  - volunteers_30degcam/, volunteers_straightcam/, volunteers/ (combined cameras)
+  - volunteers_30degcam_lipcompare/, volunteers_straightcam_lipcompare/ (female volunteers matched to lipspeakers data size)
+  - combined/ (all data)
+- All data treated as test data (no train/val splits)
+
+With --use-splits flag:
+- Uses the splits created by step2 (train.txt, val.txt, test.txt)
+- Creates train/valid/test manifests
 
 Usage:
+    # Default: Create test-only manifests for all configurations
     python step3_metadata_prep.py \
-      --tcd-data-dir /path/to/processed/tcd_timit/tcd_timit_video_seg16s \
+      --tcd-data-dir /path/to/processed/tcd_timit/tcd_timit_video \
       --metadata-dir /path/to/processed/tcd_timit/metadata \
       --vocab-size 1000
+    
+    # With splits: Use existing train/val/test splits from step2
+    python step3_metadata_prep.py \
+      --tcd-data-dir /path/to/processed/tcd_timit/tcd_timit_video \
+      --metadata-dir /path/to/processed/tcd_timit/metadata \
+      --vocab-size 1000 \
+      --use-splits
 """
 
 import os
@@ -55,6 +74,79 @@ def count_frames(fids, base_dir):
     
     print(f"  Successfully counted frames for {len(total_num_frames)} files")
     return total_num_frames
+
+def create_test_manifest(tcd_data_dir, fids, labels, nfs_audio, nfs_video, metadata_dir, config_name, vocab_size):
+    """Create test-only manifest for a specific configuration"""
+    print(f"\n{'='*60}")
+    print(f"Creating test manifest for {config_name}...")
+    print(f"{'='*60}")
+    
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    
+    if not fids:
+        print(f"⚠️ Warning: No data for {config_name}")
+        return
+    
+    print(f"🔄 Processing {len(fids)} files...")
+    
+    # Generate vocabulary
+    print(f"Generating sentencepiece vocabulary...")
+    vocab_dir = metadata_dir / f"spm{vocab_size}"
+    vocab_dir.mkdir(parents=True, exist_ok=True)
+    spm_filename_prefix = f"spm_unigram{vocab_size}"
+    
+    # Adjust vocab size if dataset is small
+    total_words = len(set(" ".join(labels).lower().split()))
+    if len(labels) < 10 or total_words < vocab_size:
+        print(f"Warning: Small dataset detected: {len(labels)} samples, {total_words} unique words")
+        print(f"Adjusting vocabulary size from {vocab_size} to {min(total_words, max(5, vocab_size//2))}")
+        vocab_size = min(total_words, max(5, vocab_size//2))
+        vocab_dir = metadata_dir / f"spm{vocab_size}"
+        vocab_dir.mkdir(parents=True, exist_ok=True)
+        spm_filename_prefix = f"spm_unigram{vocab_size}"
+    
+    with NamedTemporaryFile(mode="w", delete=False) as f:
+        for label in labels:
+            f.write(label.lower() + "\n")
+        temp_file = f.name
+    
+    gen_vocab(Path(temp_file), vocab_dir / spm_filename_prefix, 'unigram', vocab_size)
+    os.unlink(temp_file)
+    
+    vocab_path = (vocab_dir / spm_filename_prefix).as_posix() + '.txt'
+    print(f"✅ Created vocabulary: {vocab_path}")
+    
+    # Create test manifest
+    tsv_path = metadata_dir / "test.tsv"
+    wrd_path = metadata_dir / "test.wrd"
+    
+    with open(tsv_path, 'w') as f:
+        f.write('/\n')  # Header line
+        for fid, label, nf_audio, nf_video in zip(fids, labels, nfs_audio, nfs_video):
+            video_path = os.path.abspath(f"{tcd_data_dir}/{fid}.mp4")
+            audio_path = os.path.abspath(f"{tcd_data_dir}/{fid}.wav")
+            
+            # Format: id, video_path, audio_path, num_video_frames, num_audio_frames
+            f.write('\t'.join([
+                fid,
+                video_path,
+                audio_path,
+                str(nf_video),
+                str(nf_audio)
+            ]) + '\n')
+    
+    with open(wrd_path, 'w') as f:
+        for label in labels:
+            f.write(f"{label}\n")
+    
+    # Copy vocabulary as dictionary
+    dict_path = metadata_dir / "dict.wrd.txt"
+    shutil.copyfile(vocab_path, str(dict_path))
+    
+    print(f"✅ Created test manifest: {tsv_path} ({len(fids)} entries)")
+    print(f"✅ Created word file: {wrd_path}")
+    print(f"✅ Created dictionary: {dict_path}")
+
 
 def check_missing_files(fids, base_dir):
     """Check for missing audio/video files"""
@@ -155,11 +247,13 @@ def create_manifest_files(tcd_data_dir, metadata_dir, vocab_size):
                 continue
                 
             with open(f"{target_dir}/{name}.tsv", 'w') as fo:
+                fo.write('/\n')  # Header line
                 for fid, label, nf_audio, nf_video in data:
                     # Convert file ID to full paths
                     video_path = os.path.abspath(f"{tcd_data_dir}/{fid}.mp4")
                     audio_path = os.path.abspath(f"{tcd_data_dir}/{fid}.wav")
                     
+                    # Format: id, video_path, audio_path, num_video_frames, num_audio_frames
                     fo.write('\t'.join([
                         fid,
                         video_path,
@@ -239,6 +333,8 @@ def main():
                         help='Directory where metadata files will be created')
     parser.add_argument('--vocab-size', type=int, default=1000,
                         help='Vocabulary size for sentencepiece')
+    parser.add_argument('--use-splits', action='store_true',
+                        help='Use existing train/val/test split files from step2 (default: create test-only manifests)')
     
     args = parser.parse_args()
     
@@ -268,43 +364,210 @@ def main():
             fids = [ln.strip() for ln in f.readlines()]
         print(f"Found {len(fids)} files to process")
         
-        # Step 1: Check for missing files
-        missing_fids = check_missing_files(fids, str(tcd_data_dir))
+        # Check if user wants to use existing splits
+        if args.use_splits:
+            train_split_file = tcd_data_dir / "train.txt"
+            if not train_split_file.exists():
+                print("Error: --use-splits specified but no split files found")
+                print(f"Expected: {train_split_file}")
+                print("Run step2_generate_file_lists.py first to create split files")
+                return 1
+            
+            print("Using existing split files from step2 - creating train/val/test manifests")
+            
+            # Step 1: Check for missing files
+            missing_fids = check_missing_files(fids, str(tcd_data_dir))
+            
+            if len(missing_fids) > 0:
+                missing_list_path = tcd_data_dir / 'missing.list'
+                with open(missing_list_path, 'w') as fo:
+                    fo.write('\n'.join(missing_fids) + '\n')
+                print(f"Some audio/video files are missing. See: {missing_list_path}")
+                print("Please resolve missing files before proceeding.")
+                return 1
+            
+            # Step 2: Count frames
+            num_frames = count_frames(fids, str(tcd_data_dir))
+            
+            if len(num_frames) == 0:
+                print("No valid files found for frame counting")
+                return 1
+            
+            # Step 3: Create frame count files
+            nframes_audio_path, nframes_video_path = create_frame_files(
+                str(tcd_data_dir), fids, num_frames
+            )
+            
+            # Step 4: Create manifest files with splits
+            output_dir = create_manifest_files(str(tcd_data_dir), str(metadata_dir), args.vocab_size)
+            
+            print("-" * 60)
+            print("Processing completed successfully!")
+            print(f"Output directory: {output_dir}")
+            print("Generated files:")
+            print(f"   Frame counts: {nframes_audio_path}, {nframes_video_path}")
+            print(f"   Manifests: train.tsv, valid.tsv, test.tsv")
+            print(f"   Word files: train.wrd, valid.wrd, test.wrd")
+            print(f"   Dictionary: dict.wrd.txt")
         
-        if len(missing_fids) > 0:
-            missing_list_path = tcd_data_dir / 'missing.list'
-            with open(missing_list_path, 'w') as fo:
-                fo.write('\n'.join(missing_fids) + '\n')
-            print(f"Some audio/video files are missing. See: {missing_list_path}")
-            print("Please resolve missing files before proceeding.")
-            return 1
-        
-        # Step 2: Count frames
-        num_frames = count_frames(fids, str(tcd_data_dir))
-        
-        if len(num_frames) == 0:
-            print("No valid files found for frame counting")
-            return 1
-        
-        # Step 3: Create frame count files
-        nframes_audio_path, nframes_video_path = create_frame_files(
-            str(tcd_data_dir), fids, num_frames
-        )
-        
-        # Step 4: Create manifest files
-        output_dir = create_manifest_files(str(tcd_data_dir), str(metadata_dir), args.vocab_size)
-        
-        print("-" * 60)
-        print("Processing completed successfully!")
-        print(f"Output directory: {output_dir}")
-        print("Generated files:")
-        print(f"   Frame counts: {nframes_audio_path}, {nframes_video_path}")
-        print(f"   Manifests: train.tsv, valid.tsv, test.tsv")
-        print(f"   Word files: train.wrd, valid.wrd, test.wrd")
-        print(f"   Dictionary: dict.wrd.txt")
+        else:
+            print("Creating test-only manifests for all configurations (7 folders)")
+            print("Use --use-splits flag to create train/val/test splits instead")
+            
+            # Read labels
+            label_list_path = tcd_data_dir / 'label.list'
+            if not label_list_path.exists():
+                print(f"Error: label.list not found in: {tcd_data_dir}")
+                return 1
+            
+            with open(label_list_path, 'r') as f:
+                labels = [ln.strip() for ln in f.readlines()]
+            
+            # Count frames for all files
+            num_frames = count_frames(fids, str(tcd_data_dir))
+            
+            if len(num_frames) == 0:
+                print("No valid files found for frame counting")
+                return 1
+            
+            # Extract frame counts
+            nfs_audio = [str(x[0]) for x in num_frames]
+            nfs_video = [str(x[1]) for x in num_frames]
+            
+            # Group files by subset and camera
+            configs = {
+                'lipspeakers_30degcam': [],
+                'lipspeakers_straightcam': [],
+                'lipspeakers': [],
+                'volunteers_30degcam': [],
+                'volunteers_straightcam': [],
+                'volunteers': [],
+                'volunteers_30degcam_lipcompare': [],
+                'volunteers_straightcam_lipcompare': [],
+                'combined': []
+            }
+            
+            # Track speakers and counts for lipcompare subset
+            volunteer_speakers_30deg = {}  # speaker -> list of indices
+            volunteer_speakers_straight = {}  # speaker -> list of indices
+            lipspeakers_30deg_count = 0
+            lipspeakers_straight_count = 0
+            
+            for i, fid in enumerate(fids):
+                parts = fid.split('/')
+                # Expected format: subset/speaker/Clips/camera/filename
+                # Example: lipspeakers/Lipspkr1/Clips/30degcam/Lipspkr1_Clips_30degcam_sa1
+                
+                if len(parts) >= 4:
+                    subset = parts[0]  # volunteers or lipspeakers
+                    speaker = parts[1]  # speaker ID
+                    camera = parts[3]  # 30degcam or straightcam (after Clips)
+                    
+                    # Add to combined
+                    configs['combined'].append(i)
+                    
+                    # Add to subset-specific
+                    if subset in ['volunteers', 'lipspeakers']:
+                        configs[subset].append(i)
+                        
+                        # Add to camera-specific
+                        if camera in ['30degcam', 'straightcam']:
+                            config_key = f"{subset}_{camera}"
+                            if config_key in configs:
+                                configs[config_key].append(i)
+                            
+                            # Count lipspeakers for target size
+                            if subset == 'lipspeakers':
+                                if camera == '30degcam':
+                                    lipspeakers_30deg_count += 1
+                                elif camera == 'straightcam':
+                                    lipspeakers_straight_count += 1
+                            
+                            # For volunteers, track speakers and their files
+                            elif subset == 'volunteers':
+                                if camera == '30degcam':
+                                    if speaker not in volunteer_speakers_30deg:
+                                        volunteer_speakers_30deg[speaker] = []
+                                    volunteer_speakers_30deg[speaker].append(i)
+                                elif camera == 'straightcam':
+                                    if speaker not in volunteer_speakers_straight:
+                                        volunteer_speakers_straight[speaker] = []
+                                    volunteer_speakers_straight[speaker].append(i)
+            
+            # Select female volunteers to match lipspeakers data size
+            def select_volunteers_to_match_size(volunteer_speakers_dict, target_count):
+                """Select female volunteers until we match or exceed target count"""
+                # Filter for female speakers (ending with 'F')
+                female_speakers = {s: files for s, files in volunteer_speakers_dict.items() if s.endswith('F')}
+                
+                # Sort by speaker ID for consistency
+                sorted_speakers = sorted(female_speakers.keys())
+                
+                selected_indices = []
+                selected_speakers = []
+                
+                for speaker in sorted_speakers:
+                    selected_indices.extend(female_speakers[speaker])
+                    selected_speakers.append(speaker)
+                    
+                    # Stop when we've matched or exceeded target
+                    if len(selected_indices) >= target_count:
+                        break
+                
+                return selected_indices, selected_speakers
+            
+            # Select volunteers for each camera
+            lipcompare_30deg_indices, lipcompare_30deg_speakers = select_volunteers_to_match_size(
+                volunteer_speakers_30deg, lipspeakers_30deg_count
+            )
+            lipcompare_straight_indices, lipcompare_straight_speakers = select_volunteers_to_match_size(
+                volunteer_speakers_straight, lipspeakers_straight_count
+            )
+            
+            configs['volunteers_30degcam_lipcompare'] = lipcompare_30deg_indices
+            configs['volunteers_straightcam_lipcompare'] = lipcompare_straight_indices
+            
+            print(f"\nLipspeakers data size:")
+            print(f"  30degcam: {lipspeakers_30deg_count} files")
+            print(f"  straightcam: {lipspeakers_straight_count} files")
+            print(f"\nSelected female volunteers for lipcompare:")
+            print(f"  30degcam: {len(lipcompare_30deg_indices)} files from {len(lipcompare_30deg_speakers)} speakers {lipcompare_30deg_speakers}")
+            print(f"  straightcam: {len(lipcompare_straight_indices)} files from {len(lipcompare_straight_speakers)} speakers {lipcompare_straight_speakers}")
+            
+            # Create test manifests for each configuration
+            for config_name, indices in configs.items():
+                if not indices:
+                    continue
+                
+                config_fids = [fids[i] for i in indices]
+                config_labels = [labels[i] for i in indices]
+                config_nfs_audio = [nfs_audio[i] for i in indices]
+                config_nfs_video = [nfs_video[i] for i in indices]
+                
+                config_metadata_dir = metadata_dir / config_name
+                create_test_manifest(
+                    str(tcd_data_dir),
+                    config_fids,
+                    config_labels,
+                    config_nfs_audio,
+                    config_nfs_video,
+                    config_metadata_dir,
+                    config_name,
+                    args.vocab_size
+                )
+            
+            print("\n" + "="*60)
+            print("✅ Processing completed successfully!")
+            print("="*60)
+            print(f"\nTest-only manifests created:")
+            for config_name, indices in configs.items():
+                if indices:
+                    print(f"  {config_name}: {len(indices)} files → {metadata_dir}/{config_name}/")
         
     except Exception as e:
         print(f"Error during processing: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return 1
     
     return 0
