@@ -83,7 +83,7 @@ python preparation/step3_metadata_prep.py \
 Creates 9 metadata folders with test.tsv only:
 - `lipspeakers_30degcam/`, `lipspeakers_straightcam/`, `lipspeakers/`
 - `volunteers_30degcam/`, `volunteers_straightcam/`, `volunteers/`
-- `volunteers_30degcam_lipcompare/`, `volunteers_straightcam_lipcompare/` (female volunteers matched to lipspeakers data size for fair comparison)
+- `volunteers_30degcam_lipcompare/`, `volunteers_straightcam_lipcompare/` (female volunteers with exactly the same number of files as lipspeakers for fair comparison)
 - `combined/` (all data)
 
 **With --use-splits Flag:**
@@ -121,9 +121,9 @@ output/
 │       │   ├── test.tsv, test.wrd, dict.wrd.txt
 │       ├── volunteers/
 │       │   ├── test.tsv, test.wrd, dict.wrd.txt
-│       ├── volunteers_30degcam_lipcompare/     # Female volunteers matched to lipspeakers size
+│       ├── volunteers_30degcam_lipcompare/     # Female volunteers, exactly same file count as lipspeakers
 │       │   ├── test.tsv, test.wrd, dict.wrd.txt
-│       ├── volunteers_straightcam_lipcompare/
+│       ├── volunteers_straightcam_lipcompare/  # Female volunteers, exactly same file count as lipspeakers
 │       │   ├── test.tsv, test.wrd, dict.wrd.txt
 │       ├── combined/
 │       │   ├── test.tsv, test.wrd, dict.wrd.txt

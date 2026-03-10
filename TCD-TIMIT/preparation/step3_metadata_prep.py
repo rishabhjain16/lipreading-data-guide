@@ -411,7 +411,7 @@ def main():
             print(f"   Dictionary: dict.wrd.txt")
         
         else:
-            print("Creating test-only manifests for all configurations (7 folders)")
+            print("Creating test-only manifests for all configurations (9 folders)")
             print("Use --use-splits flag to create train/val/test splits instead")
             
             # Read labels
@@ -496,7 +496,7 @@ def main():
             
             # Select female volunteers to match lipspeakers data size
             def select_volunteers_to_match_size(volunteer_speakers_dict, target_count):
-                """Select female volunteers until we match or exceed target count"""
+                """Select female volunteers to exactly match target count"""
                 # Filter for female speakers (ending with 'F')
                 female_speakers = {s: files for s, files in volunteer_speakers_dict.items() if s.endswith('F')}
                 
@@ -507,10 +507,19 @@ def main():
                 selected_speakers = []
                 
                 for speaker in sorted_speakers:
-                    selected_indices.extend(female_speakers[speaker])
-                    selected_speakers.append(speaker)
+                    speaker_files = female_speakers[speaker]
                     
-                    # Stop when we've matched or exceeded target
+                    # If adding all files from this speaker would exceed target, only add what we need
+                    if len(selected_indices) + len(speaker_files) > target_count:
+                        remaining = target_count - len(selected_indices)
+                        selected_indices.extend(speaker_files[:remaining])
+                        selected_speakers.append(f"{speaker}(partial:{remaining}/{len(speaker_files)})")
+                        break
+                    else:
+                        selected_indices.extend(speaker_files)
+                        selected_speakers.append(speaker)
+                    
+                    # Stop when we've exactly matched target
                     if len(selected_indices) >= target_count:
                         break
                 
