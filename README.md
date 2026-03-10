@@ -14,16 +14,16 @@ A comprehensive toolkit for preparing popular lip reading and visual speech reco
 | **LombardGrid** | ✅ Ready | Lombard effect speech | ~5.4k utterances | Noisy conditions, 54 speakers |
 | **RoomReader** | ✅ Ready | Multiparty conversations | ~322 videos | Online meetings, 118 participants |
 | **Candor** | ✅ Ready | Naturalistic conversations | ~1,656 conversations | Unscripted dyadic conversations |
-| **VoxCeleb2** | ✅ Ready | Speaker recognition dataset | ~1M utterances | Large-scale, in-the-wild |
+| **VoxCeleb2** | 🔄 Planned | Speaker recognition dataset | ~1M utterances | Whisper transcription pipeline planned |
 | **WildVSR** | ✅ Ready | Wild VSR test set | Test set | Generalization benchmark |
 | **AVCocktail** | ✅ Ready | Cocktail party speech | Challenge dataset | Multi-speaker, noisy |
 | **Muavic** | ⚠️ Experimental | Multilingual audio-visual | 9 languages | Speech recognition + translation |
 | **MultiVSR** | 🔄 Planned | Large-scale multilingual VSR | ~1,400 hours | 20+ languages |
 
 **Legend:**
-- ✅ Ready: Fully tested and can be used with AV-HuBERT and Auto-AVSR.
+- ✅ Ready: Fully tested and production-ready
 - ⚠️ Experimental: Available but not fully tested
-- 🔄 Planned: Future support planned
+- 🔄 Planned: Future support planned (download instructions may be available)
 
 ## Utilities
 
