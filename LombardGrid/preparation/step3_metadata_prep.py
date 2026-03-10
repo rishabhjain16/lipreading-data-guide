@@ -3,21 +3,12 @@
 Lombard GRID Step 3: Metadata Preparation
 
 This script counts frames and creates manifest files for Lombard GRID dataset.
-Supports speaker-based train/val/test splits.
+Creates a single test manifest with all data.
 
 Usage:
-    # All speakers with speaker-based splits
     python step3_metadata_prep.py \
         --lombardgrid-data-dir /path/to/output/lombardgrid_video \
         --metadata-dir /path/to/output/metadata \
-        --split-ratios 0.7,0.15,0.15 \
-        --vocab-size 100
-
-    # Individual speaker
-    python step3_metadata_prep.py \
-        --lombardgrid-data-dir /path/to/output/lombardgrid_video \
-        --metadata-dir /path/to/output/metadata_s2 \
-        --speaker s2 \
         --vocab-size 100
 """
 
@@ -28,7 +19,6 @@ from tqdm import tqdm
 from pathlib import Path
 from scipy.io import wavfile
 from tempfile import NamedTemporaryFile
-import random
 
 # Import vocabulary generation from LRS3
 import sys
@@ -49,28 +39,10 @@ parser.add_argument(
     help="Output directory for metadata files",
 )
 parser.add_argument(
-    "--speaker",
-    type=str,
-    default=None,
-    help="Process specific speaker or omit for all speakers",
-)
-parser.add_argument(
-    "--split-ratios",
-    type=str,
-    default="0.7,0.15,0.15",
-    help="Train/val/test split ratios (default: 0.7,0.15,0.15)",
-)
-parser.add_argument(
     "--vocab-size",
     type=int,
     default=100,
     help="Vocabulary size for sentencepiece (default: 100)",
-)
-parser.add_argument(
-    "--seed",
-    type=int,
-    default=42,
-    help="Random seed for reproducible splits (default: 42)",
 )
 args = parser.parse_args()
 
@@ -78,17 +50,18 @@ data_dir = Path(args.lombardgrid_data_dir)
 metadata_dir = Path(args.metadata_dir)
 metadata_dir.mkdir(parents=True, exist_ok=True)
 
-# Parse split ratios
-split_ratios = [float(x) for x in args.split_ratios.split(',')]
-assert len(split_ratios) == 3, "Must provide 3 split ratios (train,val,test)"
-assert abs(sum(split_ratios) - 1.0) < 0.01, "Split ratios must sum to 1.0"
+# Create subdirectories for front, side, and combined
+front_metadata_dir = metadata_dir / "front"
+side_metadata_dir = metadata_dir / "side"
+combined_metadata_dir = metadata_dir / "combined"
 
-# Determine file list suffix
-output_suffix = f"_{args.speaker}" if args.speaker else ""
+front_metadata_dir.mkdir(parents=True, exist_ok=True)
+side_metadata_dir.mkdir(parents=True, exist_ok=True)
+combined_metadata_dir.mkdir(parents=True, exist_ok=True)
 
 # Load file and label lists
-file_list_path = data_dir / f"file{output_suffix}.list"
-label_list_path = data_dir / f"label{output_suffix}.list"
+file_list_path = data_dir / "file.list"
+label_list_path = data_dir / "label.list"
 
 if not file_list_path.exists() or not label_list_path.exists():
     print(f"❌ Error: File lists not found. Run step2 first.")
@@ -105,181 +78,190 @@ with open(label_list_path, 'r') as f:
 
 print(f"Loaded {len(fids)} files")
 
-# Count frames
-print("\nCounting frames in audio and video files...")
-audio_num_frames = []
-video_num_frames = []
-valid_fids = []
-valid_labels = []
+# Separate files by view (front/side)
+front_fids = []
+front_labels = []
+side_fids = []
+side_labels = []
 
-for fid, label in tqdm(zip(fids, labels), total=len(fids), desc="Counting frames"):
-    wav_fn = data_dir / f"{fid}.wav"
-    video_fn = data_dir / f"{fid}.mp4"
+for fid, label in zip(fids, labels):
+    if fid.startswith('front/'):
+        front_fids.append(fid)
+        front_labels.append(label)
+    elif fid.startswith('side/'):
+        side_fids.append(fid)
+        side_labels.append(label)
+
+print(f"Front view: {len(front_fids)} files")
+print(f"Side view: {len(side_fids)} files")
+
+# Count frames for each view
+def count_frames_for_view(fids, labels, view_name):
+    print(f"\nCounting frames for {view_name} view...")
+    audio_num_frames = []
+    video_num_frames = []
+    valid_fids = []
+    valid_labels = []
     
-    if not wav_fn.exists() or not video_fn.exists():
-        print(f"Warning: Missing files for {fid}")
-        continue
-    
-    try:
-        num_frames_audio = len(wavfile.read(str(wav_fn))[1])
-        cap = cv2.VideoCapture(str(video_fn))
-        num_frames_video = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        cap.release()
+    for fid, label in tqdm(zip(fids, labels), total=len(fids), desc=f"Counting {view_name} frames"):
+        wav_fn = data_dir / f"{fid}.wav"
+        video_fn = data_dir / f"{fid}.mp4"
         
-        if num_frames_audio > 0 and num_frames_video > 0:
-            audio_num_frames.append(num_frames_audio)
-            video_num_frames.append(num_frames_video)
-            valid_fids.append(fid)
-            valid_labels.append(label)
-    except Exception as e:
-        print(f"Warning: Error processing {fid}: {str(e)}")
-        continue
-
-print(f"Successfully counted frames for {len(valid_fids)} files")
-
-# Create nframes files
-nframes_audio_path = data_dir / f"nframes{output_suffix}.audio"
-nframes_video_path = data_dir / f"nframes{output_suffix}.video"
-
-with open(nframes_audio_path, 'w') as f:
-    f.write('\n'.join([str(x) for x in audio_num_frames]))
-
-with open(nframes_video_path, 'w') as f:
-    f.write('\n'.join([str(x) for x in video_num_frames]))
-
-print(f"\n✅ Created: {nframes_audio_path}")
-print(f"✅ Created: {nframes_video_path}")
-
-# Generate vocabulary
-print("\nGenerating sentencepiece vocabulary...")
-vocab_size = args.vocab_size
-
-vocab_dir = metadata_dir / f"spm{vocab_size}"
-vocab_dir.mkdir(parents=True, exist_ok=True)
-spm_filename_prefix = f"spm_unigram{vocab_size}"
-
-with NamedTemporaryFile(mode="w", delete=False) as f:
-    for label in valid_labels:
-        f.write(label.lower() + "\n")
-    temp_file = f.name
-
-gen_vocab(Path(temp_file), vocab_dir / spm_filename_prefix, 'unigram', vocab_size)
-os.unlink(temp_file)
-
-vocab_path = vocab_dir / f"{spm_filename_prefix}.txt"
-print(f"✅ Created vocabulary: {vocab_path}")
-
-# Create train/val/test splits
-if args.speaker:
-    # Single speaker: random split
-    print(f"\nCreating random splits for speaker {args.speaker}...")
-    random.seed(args.seed)
-    indices = list(range(len(valid_fids)))
-    random.shuffle(indices)
+        if not wav_fn.exists() or not video_fn.exists():
+            print(f"Warning: Missing files for {fid}")
+            continue
+        
+        try:
+            num_frames_audio = len(wavfile.read(str(wav_fn))[1])
+            cap = cv2.VideoCapture(str(video_fn))
+            num_frames_video = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            cap.release()
+            
+            if num_frames_audio > 0 and num_frames_video > 0:
+                audio_num_frames.append(num_frames_audio)
+                video_num_frames.append(num_frames_video)
+                valid_fids.append(fid)
+                valid_labels.append(label)
+        except Exception as e:
+            print(f"Warning: Error processing {fid}: {str(e)}")
+            continue
     
-    n_train = int(len(indices) * split_ratios[0])
-    n_val = int(len(indices) * split_ratios[1])
-    
-    train_indices = indices[:n_train]
-    val_indices = indices[n_train:n_train + n_val]
-    test_indices = indices[n_train + n_val:]
-    
-    splits = {
-        'train': train_indices,
-        'valid': val_indices,
-        'test': test_indices,
-    }
-else:
-    # Multiple speakers: speaker-based split
-    print("\nCreating speaker-based splits...")
-    
-    # Group files by speaker
-    speaker_files = {}
-    for idx, fid in enumerate(valid_fids):
-        speaker = fid.split('/')[0]
-        if speaker not in speaker_files:
-            speaker_files[speaker] = []
-        speaker_files[speaker].append(idx)
-    
-    speakers = sorted(speaker_files.keys())
-    random.seed(args.seed)
-    random.shuffle(speakers)
-    
-    n_train = int(len(speakers) * split_ratios[0])
-    n_val = int(len(speakers) * split_ratios[1])
-    
-    train_speakers = speakers[:n_train]
-    val_speakers = speakers[n_train:n_train + n_val]
-    test_speakers = speakers[n_train + n_val:]
-    
-    train_indices = [idx for s in train_speakers for idx in speaker_files[s]]
-    val_indices = [idx for s in val_speakers for idx in speaker_files[s]]
-    test_indices = [idx for s in test_speakers for idx in speaker_files[s]]
-    
-    splits = {
-        'train': train_indices,
-        'valid': val_indices,
-        'test': test_indices,
-    }
-    
-    print(f"  Train speakers ({len(train_speakers)}): {', '.join(train_speakers)}")
-    print(f"  Val speakers ({len(val_speakers)}): {', '.join(val_speakers)}")
-    print(f"  Test speakers ({len(test_speakers)}): {', '.join(test_speakers)}")
+    print(f"Successfully counted frames for {len(valid_fids)} {view_name} files")
+    return audio_num_frames, video_num_frames, valid_fids, valid_labels
 
-# Create manifest files
-print("\nCreating manifest files...")
-for split_name, indices in splits.items():
-    if not indices:
-        continue
+# Process front view
+front_audio_frames, front_video_frames, front_valid_fids, front_valid_labels = count_frames_for_view(
+    front_fids, front_labels, "front"
+)
+
+# Process side view
+side_audio_frames, side_video_frames, side_valid_fids, side_valid_labels = count_frames_for_view(
+    side_fids, side_labels, "side"
+)
+
+# Combined data
+combined_audio_frames = front_audio_frames + side_audio_frames
+combined_video_frames = front_video_frames + side_video_frames
+combined_valid_fids = front_valid_fids + side_valid_fids
+combined_valid_labels = front_valid_labels + side_valid_labels
+
+print(f"\nCombined: {len(combined_valid_fids)} files")
+
+# Function to create metadata for a view
+def create_metadata_for_view(view_name, view_dir, audio_frames, video_frames, valid_fids, valid_labels):
+    print(f"\n{'='*60}")
+    print(f"Creating metadata for {view_name} view...")
+    print(f"{'='*60}")
     
-    manifest_path = metadata_dir / f"{split_name}.tsv"
-    wrd_path = metadata_dir / f"{split_name}.wrd"
+    # Create nframes files
+    nframes_audio_path = data_dir / f"nframes_{view_name}.audio"
+    nframes_video_path = data_dir / f"nframes_{view_name}.video"
+    
+    with open(nframes_audio_path, 'w') as f:
+        f.write('\n'.join([str(x) for x in audio_frames]))
+    
+    with open(nframes_video_path, 'w') as f:
+        f.write('\n'.join([str(x) for x in video_frames]))
+    
+    print(f"✅ Created: {nframes_audio_path}")
+    print(f"✅ Created: {nframes_video_path}")
+    
+    # Generate vocabulary
+    print(f"Generating sentencepiece vocabulary for {view_name}...")
+    vocab_size = args.vocab_size
+    
+    vocab_dir = view_dir / f"spm{vocab_size}"
+    vocab_dir.mkdir(parents=True, exist_ok=True)
+    spm_filename_prefix = f"spm_unigram{vocab_size}"
+    
+    with NamedTemporaryFile(mode="w", delete=False) as f:
+        for label in valid_labels:
+            f.write(label.lower() + "\n")
+        temp_file = f.name
+    
+    gen_vocab(Path(temp_file), vocab_dir / spm_filename_prefix, 'unigram', vocab_size)
+    os.unlink(temp_file)
+    
+    vocab_path = vocab_dir / f"{spm_filename_prefix}.txt"
+    print(f"✅ Created vocabulary: {vocab_path}")
+    
+    # Create test manifest
+    manifest_path = view_dir / "test.tsv"
+    wrd_path = view_dir / "test.wrd"
     
     with open(manifest_path, 'w') as f:
         # Header
         f.write("/\n")
         
-        # Write entries
-        for idx in indices:
+        # Write all entries
+        for idx in range(len(valid_fids)):
             fid = valid_fids[idx]
             video_path = data_dir / f"{fid}.mp4"
             audio_path = data_dir / f"{fid}.wav"
-            num_audio = audio_num_frames[idx]
-            num_video = video_num_frames[idx]
+            num_audio = audio_frames[idx]
+            num_video = video_frames[idx]
             
-            # Format: id, video_path, audio_path, num_video_frames, num_audio_frames
-            f.write(f"{fid}\t{video_path}\t{audio_path}\t{num_video}\t{num_audio}\n")
+            # Format: id, video_path, audio_path, num_audio_frames, num_video_frames
+            f.write(f"{fid}\t{video_path}\t{audio_path}\t{num_audio}\t{num_video}\n")
     
     with open(wrd_path, 'w') as f:
-        for idx in indices:
-            f.write(valid_labels[idx] + '\n')
+        for label in valid_labels:
+            f.write(label + '\n')
     
-    print(f"✅ Created {split_name}: {manifest_path} ({len(indices)} entries)")
-
-# Create dictionary file
-print("\nCreating dictionary file...")
-dict_path = metadata_dir / "dict.wrd.txt"
-
-vocab_file = vocab_dir / f"{spm_filename_prefix}.vocab"
-if vocab_file.exists():
-    with open(vocab_file, 'r') as f:
-        vocab_lines = f.readlines()
+    print(f"✅ Created test manifest: {manifest_path} ({len(valid_fids)} entries)")
     
-    with open(dict_path, 'w') as f:
-        for line in vocab_lines:
-            token = line.split('\t')[0]
-            if token not in ['<unk>', '<s>', '</s>']:
-                f.write(f"{token} 1\n")
+    # Create dictionary file
+    dict_path = view_dir / "dict.wrd.txt"
     
-    print(f"✅ Created dictionary: {dict_path}")
+    vocab_file = vocab_dir / f"{spm_filename_prefix}.vocab"
+    if vocab_file.exists():
+        with open(vocab_file, 'r') as f:
+            vocab_lines = f.readlines()
+        
+        with open(dict_path, 'w') as f:
+            for line in vocab_lines:
+                token = line.split('\t')[0]
+                if token not in ['<unk>', '<s>', '</s>']:
+                    f.write(f"{token} 1\n")
+        
+        print(f"✅ Created dictionary: {dict_path}")
+    
+    return {
+        'nframes_audio': nframes_audio_path,
+        'nframes_video': nframes_video_path,
+        'manifest': manifest_path,
+        'wrd': wrd_path,
+        'dict': dict_path,
+        'vocab_dir': vocab_dir
+    }
 
-print("\n🎉 Metadata preparation complete!")
-print(f"\nOutput files:")
-print(f"  - {nframes_audio_path}")
-print(f"  - {nframes_video_path}")
-for split_name in ['train', 'valid', 'test']:
-    manifest_path = metadata_dir / f"{split_name}.tsv"
-    if manifest_path.exists():
-        print(f"  - {manifest_path}")
-print(f"  - {dict_path}")
-print(f"  - {vocab_dir}/")
+# Create metadata for front view
+front_files = create_metadata_for_view(
+    "front", front_metadata_dir, 
+    front_audio_frames, front_video_frames, 
+    front_valid_fids, front_valid_labels
+)
+
+# Create metadata for side view
+side_files = create_metadata_for_view(
+    "side", side_metadata_dir,
+    side_audio_frames, side_video_frames,
+    side_valid_fids, side_valid_labels
+)
+
+# Create metadata for combined view
+combined_files = create_metadata_for_view(
+    "combined", combined_metadata_dir,
+    combined_audio_frames, combined_video_frames,
+    combined_valid_fids, combined_valid_labels
+)
+
+print("\n" + "="*60)
+print("🎉 Metadata preparation complete!")
+print("="*60)
+print(f"\nFront view metadata ({len(front_valid_fids)} files):")
+print(f"  - {front_metadata_dir}/")
+print(f"\nSide view metadata ({len(side_valid_fids)} files):")
+print(f"  - {side_metadata_dir}/")
+print(f"\nCombined metadata ({len(combined_valid_fids)} files):")
+print(f"  - {combined_metadata_dir}/")
