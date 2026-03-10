@@ -110,6 +110,95 @@ def load_csv_data(labels_dir, crop_suffix):
     
     return all_data, conversational_data, individual_data
 
+def generate_test_manifest(data_dir, data, metadata_dir, mode_name):
+    """Generate test.tsv and test.wrd files (following LRS format with video frames first)"""
+    print(f"\n{'='*60}")
+    print(f"Creating test manifest for {mode_name} mode...")
+    print(f"{'='*60}")
+    
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    
+    if not data:
+        print(f"⚠️ Warning: No data for {mode_name} mode")
+        return
+    
+    print(f"🔄 Processing {len(data)} files...")
+    
+    tsv_path = metadata_dir / "test.tsv"
+    wrd_path = metadata_dir / "test.wrd"
+    
+    valid_records = []
+    
+    # Process each record and count frames
+    for record in tqdm(data, desc=f"Processing {mode_name}"):
+        video_path = data_dir / record['video_path']
+        audio_path = video_path.with_suffix('.wav')
+        
+        if not video_path.exists():
+            print(f"⚠️ Warning: Video file not found: {video_path}")
+            continue
+            
+        if not audio_path.exists():
+            print(f"⚠️ Warning: Audio file not found: {audio_path}")
+            continue
+        
+        try:
+            # Count frames using OpenCV
+            cap = cv2.VideoCapture(str(video_path))
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            cap.release()
+            
+            if frame_count > 0:
+                # For audio frame count, we approximate based on 16kHz sample rate
+                duration = frame_count / fps if fps > 0 else 0
+                audio_frames = int(duration * 16000)  # 16kHz sample rate
+                
+                valid_records.append({
+                    'file_id': record['unique_id'],
+                    'video_path': str(video_path.absolute()),
+                    'audio_path': str(audio_path.absolute()),
+                    'frame_count': frame_count,
+                    'audio_frames': audio_frames,
+                    'transcript': clean_transcript(record['transcript'])
+                })
+            else:
+                print(f"⚠️ Warning: Invalid frame count for {video_path}")
+                
+        except Exception as e:
+            print(f"❌ Error processing {video_path}: {e}")
+            continue
+    
+    # Write .tsv file (following LRS format: id, video_path, audio_path, num_video_frames, num_audio_frames)
+    with open(tsv_path, 'w') as f:
+        f.write('/\n')  # Header line
+        for record in valid_records:
+            f.write('\t'.join([
+                record['file_id'],
+                record['video_path'],
+                record['audio_path'],
+                str(record['frame_count']),
+                str(record['audio_frames'])
+            ]) + '\n')
+    
+    # Write .wrd file
+    with open(wrd_path, 'w') as f:
+        for record in valid_records:
+            f.write(f"{record['transcript']}\n")
+    
+    print(f"✅ Created test manifest: {tsv_path} ({len(valid_records)} entries)")
+    print(f"✅ Created word file: {wrd_path}")
+    
+    # Print statistics
+    if valid_records:
+        total_frames = sum(r['frame_count'] for r in valid_records)
+        total_audio = sum(r['audio_frames'] for r in valid_records)
+        fps = 25  # Approximate FPS
+        avg_duration = total_frames / (fps * len(valid_records)) if valid_records else 0
+        
+        print(f"📈 Stats: {total_frames:,} video frames, {total_audio:,} audio frames, {avg_duration:.1f}s avg")
+
+
 def split_data_by_speaker(data, split_ratios, seed=42, force_random=False):
     """Split data by speaker to ensure no speaker overlap between splits"""
     print(f"🎯 Splitting data by speaker with ratios: {split_ratios}")

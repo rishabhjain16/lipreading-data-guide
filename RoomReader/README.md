@@ -307,19 +307,27 @@ python step1_prepare_roomreader.py \
 ```
 
 ### Step 2: Training Manifest Generation (`step2.py`)
-Creates LRS-compatible training manifests (.tsv and .wrd files) for use with standard lip reading training frameworks.
+Creates manifests (.tsv and .wrd files) for use with standard lip reading training frameworks.
 
-**Features:**
-- Generates train.tsv, valid.tsv, test.tsv manifest files
-- Creates corresponding train.wrd, valid.wrd, test.wrd word files
+**Default Behavior (Test-Only Manifests):**
+- Creates three metadata folders: `conversational/`, `individual/`, and `combined/`
+- Each folder contains `test.tsv` and `test.wrd` files
+- All data treated as test data (no train/val splits)
+- TSV format: `id, video_path, audio_path, num_video_frames, num_audio_frames`
+
+**With Train/Val/Test Splits:**
+- Use `--split-ratios` to create train/valid/test splits
+- Use `--create-mode-splits` to separate conversational and individual modes
 - Speaker-based or random data splitting
-- Frame counting with OpenCV for accurate manifest data
-- Progress tracking with tqdm
-- **Mode-specific splits**: Separate metadata folders for conversational vs individual speech
 
 **Usage:**
 ```bash
-# Create separate metadata folders for conversational and individual modes
+# Default: Create test-only manifests for all three modes
+python step2.py \
+  --roomreader-data-dir /path/to/processed/data \
+  --metadata-dir /path/to/manifests
+
+# With splits: Create train/val/test splits
 python step2.py \
   --roomreader-data-dir /path/to/processed/data \
   --metadata-dir /path/to/manifests \
@@ -332,23 +340,24 @@ python step2.py \
   --metadata-dir /path/to/manifests \
   --split-ratios 0.7,0.15,0.15 \
   --random-split
-
-# Speaker-based split (all data combined)
-python step2.py \
-  --roomreader-data-dir /path/to/processed/data \
-  --metadata-dir /path/to/manifests \
-  --split-ratios 0.7,0.15,0.15
 ```
 
 **Arguments:**
-- `--create-mode-splits`: Creates separate `metadata_conversational/` and `metadata_individual/` folders
+- `--split-ratios`: Train/validation/test ratios (optional, e.g., 0.7,0.15,0.15)
+- `--create-mode-splits`: Creates separate metadata folders for conversational and individual modes (requires --split-ratios)
 - `--random-split`: Use random splitting instead of speaker-based splitting
-- `--split-ratios`: Train/validation/test ratios (default: 0.7,0.15,0.15)
 - `--seed`: Random seed for reproducible splits (default: 42)
 
 ## Output Format
 
-The pipeline generates LRS-compatible files:
+The pipeline generates LRS-compatible files with two modes of operation:
+
+**Default (Test-Only):**
+- Three metadata folders: `conversational/`, `individual/`, `combined/`
+- Each contains `test.tsv` and `test.wrd` files
+- All data treated as test data
+
+**With Splits (Optional):**
 - **Manifest files (.tsv)**: Tab-separated values with file paths, frame counts, and audio information
 - **Word files (.wrd)**: Plain text transcriptions corresponding to each video segment
 - **Directory structure**: Organized by session and speaker for easy navigation
@@ -395,13 +404,19 @@ output_path/
 │   └── roomreader_conversational.csv      # Conversational mode metadata
 │
 └── manifests/                             # Training manifests (from step2)
-    ├── metadata_individual/               # Individual mode manifests
+    ├── conversational/                    # Conversational mode (default: test-only)
+    │   ├── test.tsv, test.wrd
+    ├── individual/                        # Individual mode (default: test-only)
+    │   ├── test.tsv, test.wrd
+    ├── combined/                          # Both modes (default: test-only)
+    │   ├── test.tsv, test.wrd
+    ├── metadata_individual/               # Individual mode (with --split-ratios --create-mode-splits)
     │   ├── train.tsv, valid.tsv, test.tsv
     │   └── train.wrd, valid.wrd, test.wrd
-    ├── metadata_conversational/           # Conversational mode manifests
+    ├── metadata_conversational/           # Conversational mode (with --split-ratios --create-mode-splits)
     │   ├── train.tsv, valid.tsv, test.tsv
     │   └── train.wrd, valid.wrd, test.wrd
-    └── metadata/                          # Combined manifests (if not using --create-mode-splits)
+    └── metadata/                          # Combined manifests (with --split-ratios, no --create-mode-splits)
         ├── train.tsv, valid.tsv, test.tsv
         └── train.wrd, valid.wrd, test.wrd
 ```
