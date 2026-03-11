@@ -69,8 +69,8 @@ print(f"Directory {os.path.dirname(label_filename)} created")
 
 f = open(label_filename, "w")
 
-# Load ASR model
-model = whisper.load_model("medium.en", device="cuda")
+# Load ASR model (using large-v3 for best accuracy)
+model = whisper.load_model("large-v3", device="cuda")
 
 # Transcription
 for filename in tqdm(files_to_process):
