@@ -68,14 +68,25 @@ combine_lrs/
 
 ## Script 2: combine_lrs_avhubert.py
 
-Combines TSV, WRD, and cluster_counts files (for AV-HuBERT/VSP-LLM).
+Combines TSV, WRD, and cluster_counts files (for AV-HuBERT/VSP-LLM), and also writes
+shared-SentencePiece inference metadata.
+
+**Shared SPM behavior (repo-wide):**
+- Model: `spm/unigram/unigram5000.model`
+- Units: `spm/unigram/unigram5000_units.txt`
+- The shared model vocabulary is **uppercase**, so text is normalized to uppercase before encoding.
 
 ### Usage
 
 ```bash
 python combine_lrs_avhubert.py \
-  --lrs2 /path/to/lrs2/metadata \
-  --lrs3 /path/to/lrs3/metadata \
+  --d1 /path/to/dataset1/metadata \
+  --d2 /path/to/dataset2/metadata \
+  # optional extras:
+  # --d3 /path/to/dataset3/metadata \
+  # --d4 /path/to/dataset4/metadata \
+  # --d5 /path/to/dataset5/metadata \
+  # --d6 /path/to/dataset6/metadata \
   --output /path/to/combined/metadata
 ```
 
@@ -83,8 +94,8 @@ python combine_lrs_avhubert.py \
 
 ```bash
 python combine_lrs_avhubert.py \
-  --lrs2 /home/rishabh/Desktop/Datasets/lrs2_rf/lrs2/lrs2_video_seg16s/data_lrs2/ \
-  --lrs3 /home/rishabh/Desktop/Datasets/lrs3/433h_data \
+  --d1 /home/rishabh/Desktop/Datasets/lrs2_rf/lrs2/lrs2_video_seg16s/data_lrs2/ \
+  --d2 /home/rishabh/Desktop/Datasets/lrs3/433h_data \
   --output /home/rishabh/Desktop/Datasets/lrs_combined_metadata
 ```
 
@@ -95,7 +106,12 @@ lrs_combined_metadata/
 ├── train.tsv, valid.tsv, test.tsv
 ├── train.wrd, valid.wrd, test.wrd
 ├── train.cluster_counts, valid.cluster_counts, test.cluster_counts
-└── dict.wrd.txt
+├── dict.wrd.txt                            # from shared SPM units (not merged from inputs)
+├── train.tokens.txt, valid.tokens.txt, test.tokens.txt
+└── train_auto_avsr.csv, valid_auto_avsr.csv, test_auto_avsr.csv
+
+label.csv format (no header):
+  `lrs_combined,<abs_video_path>,<space-separated-token-ids>`
 ```
 
 
