@@ -49,10 +49,21 @@ dst_vid_dir = os.path.join(
     args.root_dir, args.dataset, f"{args.dataset}_video_seg{args.seg_duration}s"
 )
 
+print(f"Looking for WAV files in: {dst_vid_dir}")
+print(f"Full search pattern: {os.path.join(dst_vid_dir, '**', '*.wav')}")
+
 text_transform = TextTransform()
 
 # Load video files
 all_files = sorted(glob.glob(os.path.join(dst_vid_dir, "**", "*.wav"), recursive=True))
+print(f"Found {len(all_files)} WAV files")
+
+if len(all_files) == 0:
+    print("\nNo files found! Please check:")
+    print(f"1. Does this directory exist? {dst_vid_dir}")
+    print(f"2. Run: ls {dst_vid_dir}")
+    print(f"3. You may need to run preprocess_vox2.py first to create segmented videos")
+    exit(1)
 unit = math.ceil(len(all_files) / args.groups)
 files_to_process = all_files[args.job_index * unit : (args.job_index + 1) * unit]
 

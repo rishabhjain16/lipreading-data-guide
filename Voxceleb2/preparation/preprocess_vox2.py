@@ -70,7 +70,7 @@ parser.add_argument(
 parser.add_argument(
     "--groups",
     type=int,
-    default=1,
+    default=8,
     help="Number of threads to be used in parallel",
 )
 parser.add_argument(
@@ -96,15 +96,33 @@ vid_dataloader = AVSRDataLoader(
 aud_dataloader = AVSRDataLoader(modality="audio")
 
 # Load video and audio files
-filenames = [
-    os.path.join(args.vid_dir, _ + ".mp4")
-    for _ in open(os.path.join(args.label_dir, "vox-en.id")).read().splitlines()
-]
+if args.label_dir and os.path.exists(os.path.join(args.label_dir, "vox-en.id")):
+    # Use vox-en.id if provided
+    print("Using vox-en.id file to filter videos")
+    filenames = [
+        os.path.join(args.vid_dir, _ + ".mp4")
+        for _ in open(os.path.join(args.label_dir, "vox-en.id")).read().splitlines()
+    ]
+    unit = math.ceil(len(filenames) / args.groups)
+    files_to_process = filenames[args.job_index * unit : (args.job_index + 1) * unit]
+else:
+    # Collect all video files
+    print("Scanning for video files...")
+    filenames = []
+    for root, dirs, files in os.walk(args.vid_dir):
+        for file in files:
+            if file.endswith('.mp4'):
+                filenames.append(os.path.join(root, file))
+    print(f"Found {len(filenames)} videos. Starting processing...")
+    
+    unit = math.ceil(len(filenames) / args.groups)
+    files_to_process = filenames[args.job_index * unit : (args.job_index + 1) * unit]
 
-unit = math.ceil(len(filenames) / args.groups)
-files_to_process = filenames[args.job_index * unit : (args.job_index + 1) * unit]
+processed_count = 0
+skipped_count = 0
+error_types = {}
 
-for vid_filename in tqdm(files_to_process):
+for vid_filename in tqdm(files_to_process, desc="Processing videos"):
     if args.landmarks_dir:
         landmarks_filename = (
             vid_filename.replace(args.vid_dir, args.landmarks_dir)[:-4] + ".pkl"
@@ -116,9 +134,18 @@ for vid_filename in tqdm(files_to_process):
         video_data = vid_dataloader.load_data(vid_filename, landmarks)
         aud_filename = vid_filename.replace(args.vid_dir, args.aud_dir)[:-4] + ".m4a"
         audio_data = aud_dataloader.load_data(aud_filename)
-    except (UnboundLocalError, TypeError, OverflowError, AssertionError):
+    except (UnboundLocalError, TypeError, OverflowError, AssertionError) as e:
+        error_type = type(e).__name__
+        error_types[error_type] = error_types.get(error_type, 0) + 1
+        skipped_count += 1
+        continue
+    except Exception as e:
+        error_type = f"Other: {type(e).__name__}"
+        error_types[error_type] = error_types.get(error_type, 0) + 1
+        skipped_count += 1
         continue
     if video_data is None:
+        skipped_count += 1
         continue
 
     # Process segments
@@ -153,6 +180,7 @@ for vid_filename in tqdm(files_to_process):
             video_fps=25,
             audio_sample_rate=16000,
         )
+        processed_count += 1
 
         # Merge video and audio
         if args.combine_av:
@@ -171,3 +199,15 @@ for vid_filename in tqdm(files_to_process):
             os.remove(dst_aud_filename)
             os.remove(dst_vid_filename)
             shutil.move(dst_vid_filename[:-4] + ".m.mp4", dst_vid_filename)
+
+print(f"\n{'='*60}")
+print(f"Processing Summary:")
+print(f"{'='*60}")
+print(f"Total files attempted: {len(files_to_process)}")
+print(f"Successfully processed segments: {processed_count}")
+print(f"Skipped/Failed: {skipped_count}")
+if error_types:
+    print(f"\nError breakdown:")
+    for error_type, count in sorted(error_types.items(), key=lambda x: x[1], reverse=True):
+        print(f"  {error_type}: {count}")
+print(f"{'='*60}")
