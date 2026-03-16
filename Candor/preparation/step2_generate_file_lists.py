@@ -20,9 +20,9 @@ from collections import defaultdict
 import random
 import re
 import shutil
-from tempfile import NamedTemporaryFile
 
-from gen_subword import gen_vocab
+import sentencepiece as spm
+
 from transforms import TextTransform
 
 
@@ -199,6 +199,73 @@ def generate_split_csvs(splits, labels_dir, crop_suffix):
         print(f"   ✅ {csv_path.name}")
 
 
+def _load_shared_spm():
+    """Load the repo-wide shared SentencePiece model.
+
+    Note: shared vocab is uppercase, so callers must normalize text to .upper() before encoding.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    sp_model_path = repo_root / "spm" / "unigram" / "unigram5000.model"
+    units_path = repo_root / "spm" / "unigram" / "unigram5000_units.txt"
+    if not sp_model_path.exists():
+        raise FileNotFoundError(f"Shared SPM model not found: {sp_model_path}")
+    if not units_path.exists():
+        raise FileNotFoundError(f"Shared SPM units not found: {units_path}")
+    sp = spm.SentencePieceProcessor(model_file=str(sp_model_path))
+    return sp, sp_model_path, units_path
+
+
+def write_inference_files_from_manifests(metadata_dir: Path, dataset_name: str = "candor"):
+    """Create inference artifacts next to the manifests.
+
+    Writes for each split in {train,valid,test} where files exist:
+      - <split>.tokens.txt
+      - <split>_auto_avsr.csv  (no header): dataset,abs_video_path,token_ids
+    """
+    sp, sp_model_path, _ = _load_shared_spm()
+    print(f"Using shared SPM model: {sp_model_path}")
+
+    for split in ["train", "valid", "test"]:
+        tsv_in = metadata_dir / f"{split}.tsv"
+        wrd_in = metadata_dir / f"{split}.wrd"
+        if not tsv_in.exists() or not wrd_in.exists():
+            continue
+
+        # Read video paths from TSV (skip first line '/\\n')
+        with open(tsv_in, "r", encoding="utf8") as ftsv:
+            _root = ftsv.readline()
+            tsv_lines = [ln.rstrip("\n") for ln in ftsv]
+        video_paths = []
+        for ln in tsv_lines:
+            if not ln:
+                continue
+            parts = ln.split("\t")
+            if len(parts) < 3:
+                raise ValueError(f"Malformed TSV line in {tsv_in}: {ln[:200]}")
+            video_paths.append(parts[1])
+
+        with open(wrd_in, "r", encoding="utf8") as fwrd:
+            wrd_lines = [ln.rstrip("\n") for ln in fwrd]
+
+        if len(video_paths) != len(wrd_lines):
+            raise ValueError(
+                f"Line count mismatch for {split}: {tsv_in} has {len(video_paths)} examples, "
+                f"but {wrd_in} has {len(wrd_lines)} lines"
+            )
+
+        tokens_out = metadata_dir / f"{split}.tokens.txt"
+        csv_out = metadata_dir / f"{split}_auto_avsr.csv"
+        with open(tokens_out, "w", encoding="utf8") as ftok, open(csv_out, "w", encoding="utf8") as fc:
+            for vid, text in zip(video_paths, wrd_lines):
+                ids = sp.EncodeAsIds((text or "").upper())
+                token_str = " ".join(str(i) for i in ids)
+                ftok.write(token_str + "\n")
+                fc.write(f"{dataset_name},{os.path.abspath(vid)},{token_str}\n")
+
+        print(f"   ✅ {tokens_out.name}")
+        print(f"   ✅ {csv_out.name}")
+
+
 # =========================================================
 # Training manifests
 # =========================================================
@@ -288,6 +355,8 @@ def main():
                         help='Directory containing candor-train.id, candor-valid.id, candor-test.id')
     parser.add_argument('--vocab-size', type=int, default=1000,
                         help='Vocabulary size for SentencePiece model')
+    parser.add_argument('--write-legacy-avsr-csv', action='store_true',
+                        help='Also write legacy candor_{split}.csv using TextTransform (4 columns with duration).')
 
     args = parser.parse_args()
 
@@ -339,44 +408,29 @@ def main():
             splits = split_data_by_speaker(all_data, split_ratios, args.seed)
 
     # =====================================================
-    # Train SentencePiece
+    # NOTE: We no longer train a Candor-specific SentencePiece model here.
+    # We use the repo-wide shared SPM (spm/unigram/unigram5000.model) so token ids
+    # are consistent across datasets.
     # =====================================================
-    print("\n🔤 Training SentencePiece...")
-    vocab_dir = (metadata_dir / f"spm{args.vocab_size}").absolute()
-    vocab_dir.mkdir(parents=True, exist_ok=True)
-    prefix = vocab_dir / f"spm_unigram{args.vocab_size}"
-
-    with NamedTemporaryFile("w", delete=False) as f:
-        for r in splits['train']:
-            t = clean_transcript(r['transcript'])
-            if t:
-                f.write(t + "\n")
-        f.flush()
-        print(f"  📊 Training on {len(splits['train'])} transcripts")
-        gen_vocab(Path(f.name), prefix, 'unigram', args.vocab_size)
-
-    vocab_txt = prefix.with_suffix(".txt")
-    spm_model = prefix.with_suffix(".model")
-    units_path = prefix.with_name(prefix.name + "_units.txt")
-
-    create_units_file(vocab_txt, units_path)
-    generate_dict_file(vocab_txt, metadata_dir / "dict.wrd.txt")
-
-    print(f"   ✅ SentencePiece model: {spm_model}")
-    print(f"   ✅ Vocab txt: {vocab_txt}")
-    print(f"   ✅ Units txt: {units_path}")
 
     # =====================================================
     # Manifests + tokenized CSVs
     # =====================================================
     generate_training_manifests(data_dir, splits, metadata_dir, crop_suffix)
-    generate_split_csvs(splits, labels_dir, crop_suffix)
+
+    # Inference-ready artifacts next to TSV/WRD
+    write_inference_files_from_manifests(metadata_dir, dataset_name="candor")
+
+    # Optional legacy CSV generation (uses TextTransform + per-dataset units)
+    if args.write_legacy_avsr_csv:
+        generate_split_csvs(splits, labels_dir, crop_suffix)
 
     print("\n✅ Candor Step 2 completed")
     print(f"   • train/valid/test.tsv + .wrd in {metadata_dir}")
-    print(f"   • dict.wrd.txt in {metadata_dir}")
-    print(f"   • SentencePiece files in {vocab_dir}")
-    print(f"   • candor_*{crop_suffix}.csv in {labels_dir}")
+    print(f"   • train/valid/test.tokens.txt in {metadata_dir}")
+    print(f"   • train/valid/test_auto_avsr.csv in {metadata_dir}")
+    if args.write_legacy_avsr_csv:
+        print(f"   • candor_*{crop_suffix}.csv in {labels_dir} (legacy TextTransform CSVs)")
 
     return 0
 

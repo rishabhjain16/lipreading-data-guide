@@ -18,6 +18,25 @@ python preparation/step2_generate_file_lists.py \
     --metadata-dir ./candor_output/metadata \
     --use-official-splits
 
+This step generates the standard AV-HuBERT manifests (`train/valid/test.tsv` + `.wrd`).
+It also generates **inference-friendly shared-SPM artifacts** next to the manifests:
+
+- `train.tokens.txt`, `valid.tokens.txt`, `test.tokens.txt`
+- `train_auto_avsr.csv`, `valid_auto_avsr.csv`, `test_auto_avsr.csv` (no header)
+    - **3 columns**: `dataset,abs_video_path,token_ids`
+    - `token_ids` are generated using the repo-wide shared SentencePiece model:
+        - `spm/unigram/unigram5000.model`
+        - input text is uppercased before encoding (shared vocab is uppercase)
+
+Optional (legacy) Auto-AVSR CSVs with duration + TextTransform (4 columns) can be generated with:
+
+```bash
+python preparation/step2_generate_file_lists.py \
+    --candor-data-dir /path/to/candor_processed \
+    --metadata-dir /path/to/metadata \
+    --write-legacy-avsr-csv
+```
+
 # Done! Training data in ./candor_output/metadata/
 ```
 
