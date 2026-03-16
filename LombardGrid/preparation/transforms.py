@@ -45,9 +45,10 @@ class TextTransform:
         self.ignore_id = -1
 
     def tokenize(self, text: str) -> torch.Tensor:
-        text = text.upper()
-        token_ids = self.spm.EncodeAsIds(text)
-        return torch.tensor(token_ids)
+        text = (text or "").upper()
+        tokens = self.spm.EncodeAsPieces(text)
+        token_ids = [self.hashmap.get(token, self.hashmap["<unk>"]) for token in tokens]
+        return torch.tensor(list(map(int, token_ids)))
 
     def post_process(self, token_ids: torch.Tensor) -> str:
         token_ids = token_ids[token_ids != -1]

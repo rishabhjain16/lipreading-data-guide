@@ -270,6 +270,8 @@ def write_inference_files_from_manifests(
         csv_out = metadata_dir / f"{dataset_name}_{csv_split}_transcript_lengths_seg16s{crop_suffix}.csv"
         with open(tokens_out, "w", encoding="utf8") as ftok, open(csv_out, "w", encoding="utf8") as fc:
             for vid, nf, text in zip(video_paths, nframes_video, wrd_lines):
+                # Use SentencePiece ids as-is (0-based) and let the units-file mapping
+                # (used by TextTransform) define the 1-based IDs.
                 ids = sp.EncodeAsIds((text or "").upper())
                 token_str = " ".join(str(i) for i in ids)
                 ftok.write(token_str + "\n")

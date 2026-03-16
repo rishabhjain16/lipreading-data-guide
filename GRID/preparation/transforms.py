@@ -46,10 +46,10 @@ class TextTransform:
 
     def tokenize(self, text):
         """Tokenize text to token IDs using SentencePiece."""
-        text = text.upper()  # SPM model expects uppercase
-        # Use SPM's native encoding to get token IDs directly
-        token_ids = self.spm.EncodeAsIds(text)
-        return torch.tensor(token_ids)
+        text = (text or "").upper()  # shared SPM vocab is uppercase
+        tokens = self.spm.EncodeAsPieces(text)
+        token_ids = [self.hashmap.get(token, self.hashmap["<unk>"]) for token in tokens]
+        return torch.tensor(list(map(int, token_ids)))
 
     def post_process(self, token_ids):
         """Convert token IDs back to text."""

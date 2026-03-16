@@ -188,6 +188,8 @@ def combine_datasets_multi(dataset_dirs, output_path):
         with open(tokens_out, "w", encoding="utf8") as ftok, open(csv_out, "w", encoding="utf8") as fc:
             for vid, text in zip(video_paths, wrd_lines):
                 # Shared vocab is uppercase
+                # Use SentencePiece ids as-is (0-based) and let the units-file mapping
+                # (used by TextTransform) define the 1-based IDs.
                 ids = sp.EncodeAsIds((text or "").upper())
                 token_str = " ".join(str(i) for i in ids)
                 ftok.write(token_str + "\n")
