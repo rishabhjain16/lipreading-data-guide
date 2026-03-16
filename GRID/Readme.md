@@ -31,9 +31,29 @@ python preparation/step2_generate_file_lists.py \
 python preparation/step3_metadata_prep.py \
     --grid-data-dir /path/to/output/grid_video \
     --metadata-dir /path/to/output/metadata \
-    --split-ratios 0.7,0.15,0.15 \
-    --vocab-size 100
+    --split-ratios 0.7,0.15,0.15
+
+# Step 3 (inference-only): skip splitting and write a single manifest
+python preparation/step3_metadata_prep.py \
+    --grid-data-dir /path/to/output/grid_video \
+    --metadata-dir /path/to/output/metadata \
+    --no-split
 ```
+
+Notes:
+
+- Step 2 only writes `file*.list` and `label*.list` (it does **not** do any splitting).
+- `--split-ratios` is only used in Step 3 because that’s where `train.tsv` / `valid.tsv` / `test.tsv` are created.
+
+### Tokenization (shared SPM)
+
+`step3_metadata_prep.py` tokenizes labels using the repo-wide SentencePiece model:
+
+- Model: `spm/unigram/unigram5000.model`
+- Units: `spm/unigram/unigram5000_units.txt`
+
+Important detail: this SPM model’s vocabulary is **uppercase**, so GRID labels are normalized to **uppercase before encoding**.
+If you see outputs like repeated `501 1 501 1 ...` in `tokens.txt`, it usually means the input text case didn’t match the SPM model.
 
 ## Dataset Structure
 
@@ -88,6 +108,8 @@ output/
     ├── train.tsv, valid.tsv, test.tsv
     ├── train.wrd, valid.wrd, test.wrd
     ├── dict.wrd.txt
+    ├── label.csv                             # Simple CSV (no header): dataset,abs_video_path,token_ids
+    ├── tokens.txt                            # One token-id sequence per utterance (SentencePiece ids)
     └── spm100/
 ```
 
@@ -103,7 +125,9 @@ output/
 ### Step 3
 - `--speaker`: Process specific speaker or omit for all
 - `--split-ratios`: Train/val/test ratios (default: 0.7,0.15,0.15)
-- `--vocab-size`: Vocabulary size (default: 100)
+- `--no-split`: Write a single `all.tsv`/`all.wrd` instead of `train/valid/test` (useful for inference-only)
+
+Step 3 no longer generates a custom vocabulary for GRID; it uses the shared root SPM model.
 
 ## Dependencies
 

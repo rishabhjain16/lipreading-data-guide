@@ -42,9 +42,7 @@ from scipy.io import wavfile
 from tempfile import NamedTemporaryFile
 
 # Import from LRS3 preparation (reuse the vocabulary generation)
-import sys
-sys.path.append(str(Path(__file__).parent.parent.parent / "LRS3" / "preparation"))
-from gen_subword import gen_vocab
+from transforms import TextTransform
 
 def count_frames(fids, base_dir):
     """Count frames in audio and video files"""
@@ -75,7 +73,7 @@ def count_frames(fids, base_dir):
     print(f"  Successfully counted frames for {len(total_num_frames)} files")
     return total_num_frames
 
-def create_test_manifest(tcd_data_dir, fids, labels, nfs_audio, nfs_video, metadata_dir, config_name, vocab_size):
+def create_test_manifest(tcd_data_dir, fids, labels, nfs_audio, nfs_video, metadata_dir, config_name, text_transform):
     """Create test-only manifest for a specific configuration"""
     print(f"\n{'='*60}")
     print(f"Creating test manifest for {config_name}...")
@@ -89,33 +87,14 @@ def create_test_manifest(tcd_data_dir, fids, labels, nfs_audio, nfs_video, metad
     
     print(f"🔄 Processing {len(fids)} files...")
     
-    # Generate vocabulary
-    print(f"Generating sentencepiece vocabulary...")
-    vocab_dir = metadata_dir / f"spm{vocab_size}"
-    vocab_dir.mkdir(parents=True, exist_ok=True)
-    spm_filename_prefix = f"spm_unigram{vocab_size}"
-    
-    # Adjust vocab size if dataset is small
-    total_words = len(set(" ".join(labels).lower().split()))
-    if len(labels) < 10 or total_words < vocab_size:
-        print(f"Warning: Small dataset detected: {len(labels)} samples, {total_words} unique words")
-        print(f"Adjusting vocabulary size from {vocab_size} to {min(total_words, max(5, vocab_size//2))}")
-        vocab_size = min(total_words, max(5, vocab_size//2))
-        vocab_dir = metadata_dir / f"spm{vocab_size}"
-        vocab_dir.mkdir(parents=True, exist_ok=True)
-        spm_filename_prefix = f"spm_unigram{vocab_size}"
-    
-    with NamedTemporaryFile(mode="w", delete=False) as f:
-        for label in labels:
-            f.write(label.lower() + "\n")
-        temp_file = f.name
-    
-    gen_vocab(Path(temp_file), vocab_dir / spm_filename_prefix, 'unigram', vocab_size)
-    os.unlink(temp_file)
-    
-    vocab_path = (vocab_dir / spm_filename_prefix).as_posix() + '.txt'
-    print(f"✅ Created vocabulary: {vocab_path}")
-    
+    # Create dictionary file from the shared SPM model
+    dict_path = metadata_dir / "dict.wrd.txt"
+    with open(dict_path, 'w') as f:
+        for idx, token in enumerate(text_transform.token_list):
+            if token not in ['<blank>', '<eos>', '<unk>']:
+                f.write(f"{token} {idx}\n")
+    print(f"✅ Created dictionary: {dict_path}")
+
     # Create test manifest
     tsv_path = metadata_dir / "test.tsv"
     wrd_path = metadata_dir / "test.wrd"
@@ -139,13 +118,29 @@ def create_test_manifest(tcd_data_dir, fids, labels, nfs_audio, nfs_video, metad
         for label in labels:
             f.write(f"{label}\n")
     
-    # Copy vocabulary as dictionary
-    dict_path = metadata_dir / "dict.wrd.txt"
-    shutil.copyfile(vocab_path, str(dict_path))
-    
     print(f"✅ Created test manifest: {tsv_path} ({len(fids)} entries)")
     print(f"✅ Created word file: {wrd_path}")
-    print(f"✅ Created dictionary: {dict_path}")
+
+    # Also write SentencePiece ids per utterance
+    tokens_path = metadata_dir / "tokens.txt"
+    with open(tokens_path, 'w') as ft:
+        for label in labels:
+            token_ids = text_transform.tokenize(label)
+            token_str = " ".join(str(t.item()) for t in token_ids)
+            ft.write(token_str + "\n")
+    print(f"✅ Created tokenized labels: {tokens_path}")
+
+    # Create simple label.csv for inference pipelines
+    # Format (no header): dataset,abs_video_path,token_ids
+    label_csv_path = metadata_dir / "label.csv"
+    dataset_name = "tcdtimit"
+    with open(label_csv_path, 'w') as fc:
+        for fid, label in zip(fids, labels):
+            video_abs = os.path.abspath(f"{tcd_data_dir}/{fid}.mp4")
+            token_ids = text_transform.tokenize(label)
+            token_str = " ".join(str(t.item()) for t in token_ids)
+            fc.write(f"{dataset_name},{video_abs},{token_str}\n")
+    print(f"✅ Created label CSV: {label_csv_path}")
 
 
 def check_missing_files(fids, base_dir):
@@ -209,34 +204,18 @@ def create_manifest_files(tcd_data_dir, metadata_dir, vocab_size):
             print(f"Error: Required file not found: {req_file}")
             return None
     
-    # Generate vocabulary
-    print("Generating sentencepiece vocabulary...")
-    vocab_dir = (Path(metadata_dir) / f"spm{vocab_size}").absolute()
-    vocab_dir.mkdir(parents=True, exist_ok=True)
-    smp_filename_prefix = f"spm_unigram{vocab_size}"
-    
-    # Read all label text
-    label_text = [ln.strip() for ln in open(label_list).readlines()]
-    
-    # Check if we have enough data for the requested vocab size
-    total_words = len(set(" ".join(label_text).lower().split()))
-    
-    if len(label_text) < 10 or total_words < vocab_size:
-        print(f"Warning: Small dataset detected: {len(label_text)} samples, {total_words} unique words")
-        print(f"Adjusting vocabulary size from {vocab_size} to {min(total_words, max(5, vocab_size//2))}")
-        vocab_size = min(total_words, max(5, vocab_size//2))
-        vocab_dir = (Path(metadata_dir) / f"smp{vocab_size}").absolute()
-        vocab_dir.mkdir(parents=True, exist_ok=True)
-        smp_filename_prefix = f"smp_unigram{vocab_size}"
-    
-    with NamedTemporaryFile(mode="w") as f:
-        for t in label_text:
-            f.write(t.lower() + "\n")
-        f.flush()  # Ensure data is written before training
-        gen_vocab(Path(f.name), vocab_dir/smp_filename_prefix, 'unigram', vocab_size)
-    
-    vocab_path = (vocab_dir/smp_filename_prefix).as_posix() + '.txt'
-    print(f"  Created vocabulary: {vocab_path}")
+    # Shared SPM tokenizer (repo-wide)
+    print("Initializing shared SentencePiece tokenizer...")
+    text_transform = TextTransform()
+    print(f"✅ SPM model loaded with {len(text_transform.token_list)} tokens")
+
+    # Create dictionary from shared units
+    dict_path = Path(metadata_dir) / "dict.wrd.txt"
+    with open(dict_path, 'w') as f:
+        for idx, token in enumerate(text_transform.token_list):
+            if token not in ['<blank>', '<eos>', '<unk>']:
+                f.write(f"{token} {idx}\n")
+    print(f"  Created dictionary: {dict_path}")
 
     def setup_target(target_dir, train, valid, test):
         """Setup target directory with train/valid/test splits"""
@@ -266,12 +245,11 @@ def create_manifest_files(tcd_data_dir, metadata_dir, vocab_size):
                 for _, label, _, _ in data:
                     fo.write(f"{label}\n")
         
-        shutil.copyfile(vocab_path, f"{target_dir}/dict.wrd.txt")
-        print(f"  Copied vocabulary to: {target_dir}/dict.wrd.txt")
+    # dict.wrd.txt already written from shared SPM
 
     # Read all data
     fids = [x.strip() for x in open(file_list).readlines()]
-    labels = [x.strip().lower() for x in open(label_list).readlines()]
+    labels = [x.strip() for x in open(label_list).readlines()]
     nfs_audio = [x.strip() for x in open(nframes_audio_file).readlines()]
     nfs_video = [x.strip() for x in open(nframes_video_file).readlines()]
 
@@ -314,6 +292,19 @@ def create_manifest_files(tcd_data_dir, metadata_dir, vocab_size):
     output_dir = metadata_dir
     print(f"Setting up metadata directory: {output_dir}")
     setup_target(output_dir, train, valid, test)
+
+    # Also write tokenized labels + label.csv at the root metadata_dir (covers all samples)
+    tokens_path = Path(metadata_dir) / "tokens.txt"
+    label_csv_path = Path(metadata_dir) / "label.csv"
+    with open(tokens_path, 'w') as ft, open(label_csv_path, 'w') as fc:
+        for fid, label in zip(fids, labels):
+            token_ids = text_transform.tokenize(label)
+            token_str = " ".join(str(t.item()) for t in token_ids)
+            ft.write(token_str + "\n")
+            video_abs = os.path.abspath(f"{tcd_data_dir}/{fid}.mp4")
+            fc.write(f"tcdtimit,{video_abs},{token_str}\n")
+    print(f"  Created tokenized labels: {tokens_path}")
+    print(f"  Created label CSV: {label_csv_path}")
     
     print(f"  Dataset splits:")
     print(f"    Train: {len(train)} samples")
@@ -331,8 +322,9 @@ def main():
                         help='TCD-TIMIT data directory (contains file.list, label.list, and video files)')
     parser.add_argument('--metadata-dir', type=str, required=True,
                         help='Directory where metadata files will be created')
+    # Kept for backward compatibility; no longer used (shared SPM is used)
     parser.add_argument('--vocab-size', type=int, default=1000,
-                        help='Vocabulary size for sentencepiece')
+                        help='(unused) Legacy option; shared repo-wide SPM is used')
     parser.add_argument('--use-splits', action='store_true',
                         help='Use existing train/val/test split files from step2 (default: create test-only manifests)')
     
@@ -355,7 +347,7 @@ def main():
     print(f"Starting TCD-TIMIT processing...")
     print(f"Data directory: {tcd_data_dir}")
     print(f"Metadata directory: {metadata_dir}")
-    print(f"Vocabulary size: {args.vocab_size}")
+    print(f"Vocabulary size (legacy/unused): {args.vocab_size}")
     print("-" * 60)
     
     try:
@@ -363,6 +355,11 @@ def main():
         with open(file_list_path, 'r') as f:
             fids = [ln.strip() for ln in f.readlines()]
         print(f"Found {len(fids)} files to process")
+
+        # Initialize shared SPM tokenizer once
+        print("\nInitializing shared SentencePiece tokenizer...")
+        text_transform = TextTransform()
+        print(f"✅ SPM model loaded with {len(text_transform.token_list)} tokens")
         
         # Check if user wants to use existing splits
         if args.use_splits:
@@ -562,7 +559,7 @@ def main():
                     config_nfs_video,
                     config_metadata_dir,
                     config_name,
-                    args.vocab_size
+                    text_transform
                 )
             
             print("\n" + "="*60)

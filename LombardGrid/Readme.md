@@ -40,9 +40,17 @@ python preparation/step2_generate_file_lists.py \
 # Step 3: Create metadata (optional)
 python preparation/step3_metadata_prep.py \
     --lombardgrid-data-dir /media/rishabhjain/SSD/LombardGrid_Clean/lombardgrid_video \
-    --metadata-dir /media/rishabhjain/SSD/LombardGrid_Clean/metadata \
-    --vocab-size 100
+    --metadata-dir /media/rishabhjain/SSD/LombardGrid_Clean/metadata
 ```
+
+### Tokenization (shared SPM)
+
+`step3_metadata_prep.py` tokenizes labels using the repo-wide SentencePiece model:
+
+- Model: `spm/unigram/unigram5000.model`
+- Units: `spm/unigram/unigram5000_units.txt`
+
+Important detail: this SPM model’s vocabulary is **uppercase**, so labels are normalized to **uppercase before encoding**.
 
 ## Dataset Structure
 
@@ -113,15 +121,18 @@ python preparation/step3_metadata_prep.py \
     ├── front/                               # Front view only
     │   ├── test.tsv, test.wrd
     │   ├── dict.wrd.txt
-    │   └── spm100/
+    │   ├── tokens.txt                        # One token-id sequence per utterance (SentencePiece ids)
+    │   └── label.csv                         # Simple CSV (no header): dataset,abs_video_path,token_ids
     ├── side/                                # Side view only
     │   ├── test.tsv, test.wrd
     │   ├── dict.wrd.txt
-    │   └── spm100/
+    │   ├── tokens.txt
+    │   └── label.csv
     └── combined/                            # Both front and side views
         ├── test.tsv, test.wrd
         ├── dict.wrd.txt
-        └── spm100/
+        ├── tokens.txt
+    └── label.csv
 ```
 
 ## Options
@@ -136,9 +147,9 @@ python preparation/step3_metadata_prep.py \
 - Optional `--speaker` flag to process only a specific speaker (e.g., s2)
 
 ### Step 3
-- `--vocab-size`: Vocabulary size (default: 100)
 - Creates three metadata folders: `front/`, `side/`, and `combined/`
 - All data is placed in test manifests (no train/val split)
+- Uses the shared root SPM tokenizer and writes `tokens.txt` + `label.csv` for each subset
 
 ## Dependencies
 

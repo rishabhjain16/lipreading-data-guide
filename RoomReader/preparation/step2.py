@@ -36,6 +36,37 @@ from collections import defaultdict
 import random
 import re
 
+# Shared SPM tokenizer
+from transforms import TextTransform
+
+
+def write_tokens_and_label_csv(text_transform, data_dir, valid_records, out_dir, dataset_name="roomreader"):
+    """Write tokens.txt and label.csv next to manifests.
+
+    label.csv format (no header):
+        dataset,video_path,token_ids(space-separated)
+    """
+    if not valid_records:
+        return
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    tokens_path = out_dir / "tokens.txt"
+    label_csv_path = out_dir / "label.csv"
+
+    with open(tokens_path, "w") as ftok, open(label_csv_path, "w") as fc:
+        for r in valid_records:
+            transcript = r.get("transcript", "")
+            token_ids = text_transform.tokenize(transcript)
+            token_str = " ".join(str(t.item()) for t in token_ids)
+            ftok.write(token_str + "\n")
+
+            video_abs = str(Path(r["video_path"]).resolve())
+            fc.write(f"{dataset_name},{video_abs},{token_str}\n")
+
+    print(f"✅ Created tokenized labels: {tokens_path}")
+    print(f"✅ Created label CSV: {label_csv_path}")
+
 def clean_transcript(text):
     """Clean transcript text by removing punctuation and normalizing"""
     if not text or text.strip() == "":
@@ -188,6 +219,13 @@ def generate_test_manifest(data_dir, data, metadata_dir, mode_name):
     
     print(f"✅ Created test manifest: {tsv_path} ({len(valid_records)} entries)")
     print(f"✅ Created word file: {wrd_path}")
+
+    # Tokenization outputs (shared SPM)
+    try:
+        text_transform = TextTransform()
+        write_tokens_and_label_csv(text_transform, data_dir, valid_records, metadata_dir, dataset_name="roomreader")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not create tokens.txt/label.csv for {mode_name}: {e}")
     
     # Print statistics
     if valid_records:
@@ -361,6 +399,13 @@ def generate_training_manifests(data_dir, splits, metadata_dir, crop_suffix):
         print(f"✅ {split_name}: {len(valid_records)}/{len(split_data)} valid files")
         print(f"   � Manifest: {tsv_path}")
         print(f"   📄 Words: {wrd_path}")
+
+        # Tokenization outputs (shared SPM)
+        try:
+            text_transform = TextTransform()
+            write_tokens_and_label_csv(text_transform, data_dir, valid_records, metadata_dir, dataset_name="roomreader")
+        except Exception as e:
+            print(f"⚠️ Warning: Could not create tokens.txt/label.csv for {split_name}: {e}")
         
         # Print statistics
         total_frames = sum(r['frame_count'] for r in valid_records)

@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
 """
-GRID Step 3: Metadata Preparation
+GRID Step 3: Metadata Preparation with SPM Tokenization
 
-This script counts frames and creates manifest files for GRID dataset.
+This script counts frames, creates manifest files, and tokenizes labels using 
+the shared SentencePiece model (unigram5000) for GRID dataset.
 Supports speaker-based train/val/test splits.
 
 Usage:
+    # Inference-only (no train/valid/test split; writes all.tsv/all.wrd)
+    python step3_metadata_prep.py \
+        --grid-data-dir /path/to/output/grid_video \
+        --metadata-dir /path/to/output/metadata \
+        --no-split
+
     # All speakers with speaker-based splits
     python step3_metadata_prep.py \
         --grid-data-dir /path/to/output/grid_video \
         --metadata-dir /path/to/output/metadata \
-        --split-ratios 0.7,0.15,0.15 \
-        --vocab-size 100
+        --split-ratios 0.7,0.15,0.15
 
     # Individual speaker
     python step3_metadata_prep.py \
         --grid-data-dir /path/to/output/grid_video \
         --metadata-dir /path/to/output/metadata_s1 \
-        --speaker s1 \
-        --vocab-size 100
+        --speaker s1
 """
 
 import os
@@ -30,10 +35,8 @@ from scipy.io import wavfile
 from tempfile import NamedTemporaryFile
 import random
 
-# Import vocabulary generation from LRS3
-import sys
-sys.path.append(str(Path(__file__).parent.parent.parent / "LRS3" / "preparation"))
-from gen_subword import gen_vocab
+# Import SPM tokenizer
+from transforms import TextTransform
 
 parser = argparse.ArgumentParser(description="Generate metadata for GRID dataset")
 parser.add_argument(
@@ -61,10 +64,9 @@ parser.add_argument(
     help="Train/val/test split ratios (default: 0.7,0.15,0.15)",
 )
 parser.add_argument(
-    "--vocab-size",
-    type=int,
-    default=100,
-    help="Vocabulary size for sentencepiece (default: 100)",
+    "--no-split",
+    action="store_true",
+    help="Don't create train/valid/test splits; write a single all.tsv/all.wrd for inference",
 )
 parser.add_argument(
     "--seed",
@@ -78,10 +80,12 @@ data_dir = Path(args.grid_data_dir)
 metadata_dir = Path(args.metadata_dir)
 metadata_dir.mkdir(parents=True, exist_ok=True)
 
-# Parse split ratios
-split_ratios = [float(x) for x in args.split_ratios.split(',')]
-assert len(split_ratios) == 3, "Must provide 3 split ratios (train,val,test)"
-assert abs(sum(split_ratios) - 1.0) < 0.01, "Split ratios must sum to 1.0"
+# Parse split ratios (only used when splitting)
+split_ratios = None
+if not args.no_split:
+    split_ratios = [float(x) for x in args.split_ratios.split(',')]
+    assert len(split_ratios) == 3, "Must provide 3 split ratios (train,val,test)"
+    assert abs(sum(split_ratios) - 1.0) < 0.01, "Split ratios must sum to 1.0"
 
 # Determine file list suffix
 output_suffix = f"_{args.speaker}" if args.speaker else ""
@@ -137,6 +141,11 @@ for fid, label in tqdm(zip(fids, labels), total=len(fids), desc="Counting frames
 
 print(f"Successfully counted frames for {len(valid_fids)} files")
 
+# Initialize SPM tokenizer
+print("\nInitializing SentencePiece tokenizer...")
+text_transform = TextTransform()
+print(f"✅ SPM model loaded with {len(text_transform.token_list)} tokens")
+
 # Create nframes files
 nframes_audio_path = data_dir / f"nframes{output_suffix}.audio"
 nframes_video_path = data_dir / f"nframes{output_suffix}.video"
@@ -150,81 +159,67 @@ with open(nframes_video_path, 'w') as f:
 print(f"\n✅ Created: {nframes_audio_path}")
 print(f"✅ Created: {nframes_video_path}")
 
-# Generate vocabulary
-print("\nGenerating sentencepiece vocabulary...")
-vocab_size = args.vocab_size
-
-vocab_dir = metadata_dir / f"spm{vocab_size}"
-vocab_dir.mkdir(parents=True, exist_ok=True)
-spm_filename_prefix = f"spm_unigram{vocab_size}"
-
-with NamedTemporaryFile(mode="w", delete=False) as f:
-    for label in valid_labels:
-        f.write(label.lower() + "\n")
-    temp_file = f.name
-
-gen_vocab(Path(temp_file), vocab_dir / spm_filename_prefix, 'unigram', vocab_size)
-os.unlink(temp_file)
-
-vocab_path = vocab_dir / f"{spm_filename_prefix}.txt"
-print(f"✅ Created vocabulary: {vocab_path}")
-
-# Create train/val/test splits
-if args.speaker:
-    # Single speaker: random split
-    print(f"\nCreating random splits for speaker {args.speaker}...")
-    random.seed(args.seed)
-    indices = list(range(len(valid_fids)))
-    random.shuffle(indices)
-    
-    n_train = int(len(indices) * split_ratios[0])
-    n_val = int(len(indices) * split_ratios[1])
-    
-    train_indices = indices[:n_train]
-    val_indices = indices[n_train:n_train + n_val]
-    test_indices = indices[n_train + n_val:]
-    
-    splits = {
-        'train': train_indices,
-        'valid': val_indices,
-        'test': test_indices,
-    }
+splits = None
+if args.no_split:
+    print("\nNo-split mode enabled: will write a single all.tsv/all.wrd for inference.")
+    splits = {"all": list(range(len(valid_fids)))}
 else:
-    # Multiple speakers: speaker-based split
-    print("\nCreating speaker-based splits...")
-    
-    # Group files by speaker
-    speaker_files = {}
-    for idx, fid in enumerate(valid_fids):
-        speaker = fid.split('/')[0]
-        if speaker not in speaker_files:
-            speaker_files[speaker] = []
-        speaker_files[speaker].append(idx)
-    
-    speakers = sorted(speaker_files.keys())
-    random.seed(args.seed)
-    random.shuffle(speakers)
-    
-    n_train = int(len(speakers) * split_ratios[0])
-    n_val = int(len(speakers) * split_ratios[1])
-    
-    train_speakers = speakers[:n_train]
-    val_speakers = speakers[n_train:n_train + n_val]
-    test_speakers = speakers[n_train + n_val:]
-    
-    train_indices = [idx for s in train_speakers for idx in speaker_files[s]]
-    val_indices = [idx for s in val_speakers for idx in speaker_files[s]]
-    test_indices = [idx for s in test_speakers for idx in speaker_files[s]]
-    
-    splits = {
-        'train': train_indices,
-        'valid': val_indices,
-        'test': test_indices,
-    }
-    
-    print(f"  Train speakers ({len(train_speakers)}): {', '.join(train_speakers)}")
-    print(f"  Val speakers ({len(val_speakers)}): {', '.join(val_speakers)}")
-    print(f"  Test speakers ({len(test_speakers)}): {', '.join(test_speakers)}")
+    # Create train/val/test splits
+    if args.speaker:
+        # Single speaker: random split
+        print(f"\nCreating random splits for speaker {args.speaker}...")
+        random.seed(args.seed)
+        indices = list(range(len(valid_fids)))
+        random.shuffle(indices)
+
+        n_train = int(len(indices) * split_ratios[0])
+        n_val = int(len(indices) * split_ratios[1])
+
+        train_indices = indices[:n_train]
+        val_indices = indices[n_train:n_train + n_val]
+        test_indices = indices[n_train + n_val:]
+
+        splits = {
+            'train': train_indices,
+            'valid': val_indices,
+            'test': test_indices,
+        }
+    else:
+        # Multiple speakers: speaker-based split
+        print("\nCreating speaker-based splits...")
+
+        # Group files by speaker
+        speaker_files = {}
+        for idx, fid in enumerate(valid_fids):
+            speaker = fid.split('/')[0]
+            if speaker not in speaker_files:
+                speaker_files[speaker] = []
+            speaker_files[speaker].append(idx)
+
+        speakers = sorted(speaker_files.keys())
+        random.seed(args.seed)
+        random.shuffle(speakers)
+
+        n_train = int(len(speakers) * split_ratios[0])
+        n_val = int(len(speakers) * split_ratios[1])
+
+        train_speakers = speakers[:n_train]
+        val_speakers = speakers[n_train:n_train + n_val]
+        test_speakers = speakers[n_train + n_val:]
+
+        train_indices = [idx for s in train_speakers for idx in speaker_files[s]]
+        val_indices = [idx for s in val_speakers for idx in speaker_files[s]]
+        test_indices = [idx for s in test_speakers for idx in speaker_files[s]]
+
+        splits = {
+            'train': train_indices,
+            'valid': val_indices,
+            'test': test_indices,
+        }
+
+        print(f"  Train speakers ({len(train_speakers)}): {', '.join(train_speakers)}")
+        print(f"  Val speakers ({len(val_speakers)}): {', '.join(val_speakers)}")
+        print(f"  Test speakers ({len(test_speakers)}): {', '.join(test_speakers)}")
 
 # Create manifest files
 print("\nCreating manifest files...")
@@ -256,22 +251,47 @@ for split_name, indices in splits.items():
     
     print(f"✅ Created {split_name}: {manifest_path} ({len(indices)} entries)")
 
-# Create dictionary file
-print("\nCreating dictionary file...")
+# Create dictionary file from SPM model
+print("\nCreating dictionary file from SPM model...")
 dict_path = metadata_dir / "dict.wrd.txt"
 
-vocab_file = vocab_dir / f"{spm_filename_prefix}.vocab"
-if vocab_file.exists():
-    with open(vocab_file, 'r') as f:
-        vocab_lines = f.readlines()
-    
-    with open(dict_path, 'w') as f:
-        for line in vocab_lines:
-            token = line.split('\t')[0]
-            if token not in ['<unk>', '<s>', '</s>']:
-                f.write(f"{token} 1\n")
-    
-    print(f"✅ Created dictionary: {dict_path}")
+with open(dict_path, 'w') as f:
+    for idx, token in enumerate(text_transform.token_list):
+        if token not in ['<blank>', '<eos>', '<unk>']:
+            f.write(f"{token} {idx}\n")
+
+print(f"✅ Created dictionary: {dict_path}")
+
+# Create SPM-tokenized labels file
+print("\nCreating SPM-tokenized labels...")
+tokens_path = metadata_dir / "tokens.txt"
+
+with open(tokens_path, 'w') as f:
+    for label in valid_labels:
+        token_ids = text_transform.tokenize(label)
+        token_str = " ".join(str(t.item()) for t in token_ids)
+        f.write(f"{token_str}\n")
+
+print(f"✅ Created tokenized labels: {tokens_path}")
+
+# Create simple label.csv for inference pipelines
+# Format (no header):
+#   dataset,video_path,token_ids(space-separated)
+# Example:
+#   grid,/abs/path/to/grid_video/s1/bbaf2n.mp4,3253 1629 46 330 138 76
+print("\nCreating label.csv (simple format)...")
+label_csv_path = metadata_dir / "label.csv"
+
+dataset_name = "grid"
+with open(label_csv_path, "w") as f:
+    for fid, label in zip(valid_fids, valid_labels):
+        # fid is like: s1/bbaf2n (no extension)
+        video_abs = str((data_dir / f"{fid}.mp4").resolve())
+        token_ids = text_transform.tokenize(label)
+        token_str = " ".join(str(t.item()) for t in token_ids)
+        f.write(f"{dataset_name},{video_abs},{token_str}\n")
+
+print(f"✅ Created label CSV: {label_csv_path}")
 
 print("\n🎉 Metadata preparation complete!")
 print(f"\nOutput files:")
@@ -282,4 +302,6 @@ for split_name in ['train', 'valid', 'test']:
     if manifest_path.exists():
         print(f"  - {manifest_path}")
 print(f"  - {dict_path}")
-print(f"  - {vocab_dir}/")
+print(f"  - {tokens_path}")
+
+

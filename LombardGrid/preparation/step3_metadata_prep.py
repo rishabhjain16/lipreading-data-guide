@@ -8,8 +8,7 @@ Creates a single test manifest with all data.
 Usage:
     python step3_metadata_prep.py \
         --lombardgrid-data-dir /path/to/output/lombardgrid_video \
-        --metadata-dir /path/to/output/metadata \
-        --vocab-size 100
+    --metadata-dir /path/to/output/metadata
 """
 
 import os
@@ -20,10 +19,8 @@ from pathlib import Path
 from scipy.io import wavfile
 from tempfile import NamedTemporaryFile
 
-# Import vocabulary generation from LRS3
-import sys
-sys.path.append(str(Path(__file__).parent.parent.parent / "LRS3" / "preparation"))
-from gen_subword import gen_vocab
+# Shared SPM tokenizer
+from transforms import TextTransform
 
 parser = argparse.ArgumentParser(description="Generate metadata for Lombard GRID dataset")
 parser.add_argument(
@@ -37,12 +34,6 @@ parser.add_argument(
     type=str,
     required=True,
     help="Output directory for metadata files",
-)
-parser.add_argument(
-    "--vocab-size",
-    type=int,
-    default=100,
-    help="Vocabulary size for sentencepiece (default: 100)",
 )
 args = parser.parse_args()
 
@@ -94,6 +85,11 @@ for fid, label in zip(fids, labels):
 
 print(f"Front view: {len(front_fids)} files")
 print(f"Side view: {len(side_fids)} files")
+
+# Initialize SPM tokenizer once (shared root model)
+print("\nInitializing SentencePiece tokenizer...")
+text_transform = TextTransform()
+print(f"✅ SPM model loaded with {len(text_transform.token_list)} tokens")
 
 # Count frames for each view
 def count_frames_for_view(fids, labels, view_name):
@@ -166,25 +162,6 @@ def create_metadata_for_view(view_name, view_dir, audio_frames, video_frames, va
     print(f"✅ Created: {nframes_audio_path}")
     print(f"✅ Created: {nframes_video_path}")
     
-    # Generate vocabulary
-    print(f"Generating sentencepiece vocabulary for {view_name}...")
-    vocab_size = args.vocab_size
-    
-    vocab_dir = view_dir / f"spm{vocab_size}"
-    vocab_dir.mkdir(parents=True, exist_ok=True)
-    spm_filename_prefix = f"spm_unigram{vocab_size}"
-    
-    with NamedTemporaryFile(mode="w", delete=False) as f:
-        for label in valid_labels:
-            f.write(label.lower() + "\n")
-        temp_file = f.name
-    
-    gen_vocab(Path(temp_file), vocab_dir / spm_filename_prefix, 'unigram', vocab_size)
-    os.unlink(temp_file)
-    
-    vocab_path = vocab_dir / f"{spm_filename_prefix}.txt"
-    print(f"✅ Created vocabulary: {vocab_path}")
-    
     # Create test manifest
     manifest_path = view_dir / "test.tsv"
     wrd_path = view_dir / "test.wrd"
@@ -209,30 +186,44 @@ def create_metadata_for_view(view_name, view_dir, audio_frames, video_frames, va
             f.write(label + '\n')
     
     print(f"✅ Created test manifest: {manifest_path} ({len(valid_fids)} entries)")
-    
-    # Create dictionary file
+
+    # Create dictionary file from shared SPM model
     dict_path = view_dir / "dict.wrd.txt"
-    
-    vocab_file = vocab_dir / f"{spm_filename_prefix}.vocab"
-    if vocab_file.exists():
-        with open(vocab_file, 'r') as f:
-            vocab_lines = f.readlines()
-        
-        with open(dict_path, 'w') as f:
-            for line in vocab_lines:
-                token = line.split('\t')[0]
-                if token not in ['<unk>', '<s>', '</s>']:
-                    f.write(f"{token} 1\n")
-        
-        print(f"✅ Created dictionary: {dict_path}")
-    
+    with open(dict_path, 'w') as f:
+        for idx, token in enumerate(text_transform.token_list):
+            if token not in ['<blank>', '<eos>', '<unk>']:
+                f.write(f"{token} {idx}\n")
+    print(f"✅ Created dictionary: {dict_path}")
+
+    # Create SPM-tokenized labels file
+    tokens_path = view_dir / "tokens.txt"
+    with open(tokens_path, 'w') as f:
+        for label in valid_labels:
+            token_ids = text_transform.tokenize(label)
+            token_str = " ".join(str(t.item()) for t in token_ids)
+            f.write(f"{token_str}\n")
+    print(f"✅ Created tokenized labels: {tokens_path}")
+
+    # Create simple label.csv for inference pipelines
+    # Format (no header): dataset,video_path,token_ids
+    label_csv_path = view_dir / "label.csv"
+    dataset_name = "lombardgrid"
+    with open(label_csv_path, 'w') as f:
+        for fid, label in zip(valid_fids, valid_labels):
+            video_abs = str((data_dir / f"{fid}.mp4").resolve())
+            token_ids = text_transform.tokenize(label)
+            token_str = " ".join(str(t.item()) for t in token_ids)
+            f.write(f"{dataset_name},{video_abs},{token_str}\n")
+    print(f"✅ Created label CSV: {label_csv_path}")
+
     return {
         'nframes_audio': nframes_audio_path,
         'nframes_video': nframes_video_path,
         'manifest': manifest_path,
         'wrd': wrd_path,
         'dict': dict_path,
-        'vocab_dir': vocab_dir
+        'tokens': tokens_path,
+        'label_csv': label_csv_path,
     }
 
 # Create metadata for front view

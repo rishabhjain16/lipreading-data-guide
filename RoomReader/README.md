@@ -309,9 +309,26 @@ python step1_prepare_roomreader.py \
 ### Step 2: Training Manifest Generation (`step2.py`)
 Creates manifests (.tsv and .wrd files) for use with standard lip reading training frameworks.
 
+**Tokenization (shared SPM):**
+
+In addition to the `.tsv`/`.wrd` manifests, Step 2 also writes tokenized text outputs using the
+repo-wide SentencePiece model:
+
+- Model: `spm/unigram/unigram5000.model`
+- Units: `spm/unigram/unigram5000_units.txt`
+
+The shared model vocabulary is **uppercase**, so transcripts are normalized to uppercase before encoding.
+
+Step 2 writes these files next to each manifest folder it creates:
+
+- `tokens.txt`: one space-separated SentencePiece id sequence per utterance
+- `label.csv`: one line per utterance (no header) in the format:
+  `roomreader,<abs_video_path>,<space-separated-token-ids>`
+
 **Default Behavior (Test-Only Manifests):**
 - Creates three metadata folders: `conversational/`, `individual/`, and `combined/`
 - Each folder contains `test.tsv` and `test.wrd` files
+- Each folder also contains `tokens.txt` and `label.csv`
 - All data treated as test data (no train/val splits)
 - TSV format: `id, video_path, audio_path, num_video_frames, num_audio_frames`
 
@@ -360,6 +377,7 @@ The pipeline generates LRS-compatible files with two modes of operation:
 **With Splits (Optional):**
 - **Manifest files (.tsv)**: Tab-separated values with file paths, frame counts, and audio information
 - **Word files (.wrd)**: Plain text transcriptions corresponding to each video segment
+- **Token files**: `tokens.txt` and `label.csv` are written alongside each split's manifests
 - **Directory structure**: Organized by session and speaker for easy navigation
 - **Mode separation**: Individual vs conversational audio conditions for targeted training
 

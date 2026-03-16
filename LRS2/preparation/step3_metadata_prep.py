@@ -12,8 +12,9 @@ import subprocess
 from tqdm import tqdm
 from pathlib import Path
 from scipy.io import wavfile
-from gen_subword import gen_vocab
 from tempfile import NamedTemporaryFile
+
+from transforms import TextTransform
 
 def count_frames(fids, base_dir):
     """Count frames in audio and video files"""
@@ -102,19 +103,18 @@ def create_manifest_files(lrs2_data_dir, metadata_dir, vocab_size):
         if not os.path.isfile(required_file):
             raise FileNotFoundError(f"Required file not found: {required_file}")
 
-    print("🔤 Generating sentencepiece vocabulary...")
-    vocab_dir = (Path(metadata_dir) / f"spm{vocab_size}").absolute()
-    vocab_dir.mkdir(parents=True, exist_ok=True)
-    smp_filename_prefix = f"spm_unigram{vocab_size}"
-    
-    with NamedTemporaryFile(mode="w") as f:
-        label_text = [ln.strip() for ln in open(label_list).readlines()]
-        for t in label_text:
-            f.write(t.lower() + "\n")
-        gen_vocab(Path(f.name), vocab_dir/smp_filename_prefix, 'unigram', vocab_size)
-    
-    vocab_path = (vocab_dir/smp_filename_prefix).as_posix() + '.txt'
-    print(f"  ✅ Created vocabulary: {vocab_path}")
+    # Shared SPM tokenizer (repo-wide)
+    print("🔤 Using shared SentencePiece model (repo-wide)...")
+    text_transform = TextTransform()
+    print(f"  ✅ SPM loaded with {len(text_transform.token_list)} tokens")
+
+    # Write dict.wrd.txt from shared SPM units
+    dict_path = Path(metadata_dir) / "dict.wrd.txt"
+    with open(dict_path, 'w') as f:
+        for idx, token in enumerate(text_transform.token_list):
+            if token not in ['<blank>', '<eos>', '<unk>']:
+                f.write(f"{token} {idx}\n")
+    print(f"  ✅ Created dictionary: {dict_path}")
 
     def setup_target(target_dir, train, valid, test):
         """Setup target directory with train/valid/test splits"""
@@ -144,8 +144,7 @@ def create_manifest_files(lrs2_data_dir, metadata_dir, vocab_size):
                 for _, label, _, _ in data:
                     fo.write(f"{label}\n")
         
-        shutil.copyfile(vocab_path, f"{target_dir}/dict.wrd.txt")
-        print(f"  ✅ Copied vocabulary to: {target_dir}/dict.wrd.txt")
+    # dict.wrd.txt already written from shared SPM
 
     # Read all data
     fids = [x.strip() for x in open(file_list).readlines()]
@@ -189,8 +188,9 @@ def main():
                         help='LRS2 data directory (contains file.list, label.list, and video files)')
     parser.add_argument('--metadata-dir', type=str, required=True,
                         help='Directory where metadata files will be created')
+    # Kept for backward compatibility; no longer used (shared SPM is used)
     parser.add_argument('--vocab-size', type=int, default=1000,
-                        help='Vocabulary size for sentencepiece')
+                        help='(unused) Legacy option; shared repo-wide SPM is used')
     
     args = parser.parse_args()
     
@@ -210,7 +210,7 @@ def main():
     print(f"🚀 Starting LRS2 processing...")
     print(f"📁 Data directory: {lrs2_data_dir}")
     print(f"📁 Metadata directory: {metadata_dir}")
-    print(f"📝 Vocabulary size: {args.vocab_size}")
+    print(f"📝 Vocabulary size (legacy/unused): {args.vocab_size}")
     print("-" * 60)
     
     try:

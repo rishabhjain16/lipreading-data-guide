@@ -76,7 +76,14 @@ python preparation/step3_metadata_prep.py \
 - **Frame Counting**: Audio/video synchronization (`nframes.audio`, `nframes.video`)
 - **TSV Manifests**: LRS-compatible format with audio/video paths
 - **Word Files**: Text transcriptions
-- **Vocabulary**: SentencePiece tokenization (`dict.wrd.txt`)
+- **Shared Tokenization (repo-wide SPM)**: Uses the shared SentencePiece model under `spm/unigram/`
+    - Model: `spm/unigram/unigram5000.model`
+    - Units: `spm/unigram/unigram5000_units.txt`
+    - The shared model vocabulary is **uppercase**, so transcripts are normalized to uppercase before encoding.
+- **Dictionary**: `dict.wrd.txt` is written from the shared SPM units
+- **Extra Inference Artifacts**:
+    - `tokens.txt`: one line per utterance (space-separated SentencePiece ids)
+    - `label.csv`: one line per utterance (no header): `tcdtimit,<abs_video_path>,<space-separated-token-ids>`
 - **Training Ready**: Compatible with LRS2/LRS3 training pipelines
 
 **Default Behavior (Test-Only Manifests):**
@@ -110,23 +117,23 @@ output/
 │   │   └── tcd_timit_volunteers_face_224x224_retinaface.csv
 │   └── metadata/                                # Training Manifests
 │       ├── lipspeakers_30degcam/               # Test-only manifests (default)
-│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt, tokens.txt, label.csv
 │       ├── lipspeakers_straightcam/
-│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt, tokens.txt, label.csv
 │       ├── lipspeakers/
-│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt, tokens.txt, label.csv
 │       ├── volunteers_30degcam/
-│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt, tokens.txt, label.csv
 │       ├── volunteers_straightcam/
-│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt, tokens.txt, label.csv
 │       ├── volunteers/
-│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt, tokens.txt, label.csv
 │       ├── volunteers_30degcam_lipcompare/     # Female volunteers, exactly same file count as lipspeakers
-│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt, tokens.txt, label.csv
 │       ├── volunteers_straightcam_lipcompare/  # Female volunteers, exactly same file count as lipspeakers
-│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt, tokens.txt, label.csv
 │       ├── combined/
-│       │   ├── test.tsv, test.wrd, dict.wrd.txt
+│       │   ├── test.tsv, test.wrd, dict.wrd.txt, tokens.txt, label.csv
 │       └── (with --use-splits)                 # Train/val/test splits
 │           ├── train.tsv, valid.tsv, test.tsv
 │           └── train.wrd, valid.wrd, test.wrd
@@ -162,7 +169,7 @@ python preparation/parse_mlf.py --mlf-file /path/to/file.mlf
 - `--seed`: Random seed for reproducible splits (default: 42)
 
 ### Step 3 Options
-- `--vocab-size`: SentencePiece vocabulary size (default: 1000)
+- `--vocab-size`: (legacy/unused) kept for backward compatibility; shared repo-wide SPM is used
 - `--use-splits`: Use existing train/val/test split files from step2 (default: create test-only manifests for 9 configurations)
 
 ## RetinaFace Processing
