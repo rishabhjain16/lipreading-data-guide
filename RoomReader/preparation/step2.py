@@ -70,8 +70,7 @@ def write_tokens_and_label_csv(text_transform, data_dir, valid_records, out_dir,
                 nf = int(r.get("nframes", r.get("nframes_video", -1)))
             except Exception:
                 nf = -1
-            rel_vid = os.path.relpath(video_abs, start=str(Path(data_dir).resolve()))
-            fa.write(f"{dataset_name},{rel_vid},{nf},{token_str}\n")
+            fa.write(f"{dataset_name},{video_abs},{nf},{token_str}\n")
 
     print(f"✅ Created tokenized labels: {tokens_path}")
     print(f"✅ Created label CSV: {label_csv_path}")

@@ -273,9 +273,8 @@ def write_inference_files_from_manifests(
                 ids = sp.EncodeAsIds((text or "").upper())
                 token_str = " ".join(str(i) for i in ids)
                 ftok.write(token_str + "\n")
-                # Match LRS2 behavior: 2nd column is path relative to dataset root
-                rel_vid = os.path.relpath(os.path.abspath(vid), start=str(data_dir))
-                fc.write(f"{dataset_name},{rel_vid},{nf},{token_str}\n")
+                video_abs = os.path.abspath(vid)
+                fc.write(f"{dataset_name},{video_abs},{nf},{token_str}\n")
 
         print(f"   ✅ {tokens_out.name}")
         print(f"   ✅ {csv_out.name}")

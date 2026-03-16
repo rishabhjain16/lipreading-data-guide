@@ -110,7 +110,7 @@ output/
     ├── dict.wrd.txt
     ├── label.csv                             # Simple CSV (no header): dataset,abs_video_path,token_ids
     ├── tokens.txt                            # One token-id sequence per utterance (SentencePiece ids)
-    └── grid_test_transcript_lengths_seg16s.csv # Auto-AVSR CSV (no header): dataset,rel_video_path,input_length,token_ids
+    └── grid_test_transcript_lengths_seg16s.csv # Auto-AVSR CSV (no header): dataset,abs_video_path,input_length,token_ids
     └── spm100/
 ```
 

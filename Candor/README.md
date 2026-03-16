@@ -23,7 +23,7 @@ It also generates **shared-SPM tokenization outputs** next to the manifests:
 
 - `train.tokens.txt`, `valid.tokens.txt`, `test.tokens.txt`
 - `candor_train_transcript_lengths_seg16s*.csv`, `candor_val_transcript_lengths_seg16s*.csv`, `candor_test_transcript_lengths_seg16s*.csv` (no header)
-    - **4 columns** (Auto-AVSR style, matches LRS2): `dataset,rel_video_path,input_length,token_ids`
+    - **4 columns** (Auto-AVSR style): `dataset,abs_video_path,input_length,token_ids`
     - `input_length` is the **number of video frames**
     - `token_ids` are generated using the repo-wide shared SentencePiece model:
         - `spm/unigram/unigram5000.model`

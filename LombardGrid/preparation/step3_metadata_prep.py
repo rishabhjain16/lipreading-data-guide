@@ -221,10 +221,10 @@ def create_metadata_for_view(view_name, view_dir, audio_frames, video_frames, va
     avsr_csv_path = view_dir / f"{dataset_name}_test_transcript_lengths_seg16s_{view_name}.csv"
     with open(avsr_csv_path, 'w') as f:
         for fid, nf, label in zip(valid_fids, video_frames, valid_labels):
-            rel_vid = os.path.relpath(str((data_dir / f"{fid}.mp4").resolve()), start=str(data_dir.resolve()))
+            video_abs = str((data_dir / f"{fid}.mp4").resolve())
             token_ids = text_transform.tokenize(label)
             token_str = " ".join(str(t.item()) for t in token_ids)
-            f.write(f"{dataset_name},{rel_vid},{nf},{token_str}\n")
+            f.write(f"{dataset_name},{video_abs},{nf},{token_str}\n")
     print(f"✅ Created Auto-AVSR CSV: {avsr_csv_path}")
 
     return {

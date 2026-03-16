@@ -148,10 +148,9 @@ def create_test_manifest(tcd_data_dir, fids, labels, nfs_audio, nfs_video, metad
     with open(avsr_csv_path, 'w') as fa:
         for fid, label, nf_video in zip(fids, labels, nfs_video):
             video_abs = os.path.abspath(f"{tcd_data_dir}/{fid}.mp4")
-            rel_vid = os.path.relpath(video_abs, start=os.path.abspath(tcd_data_dir))
             token_ids = text_transform.tokenize(label)
             token_str = " ".join(str(t.item()) for t in token_ids)
-            fa.write(f"{dataset_name},{rel_vid},{int(nf_video)},{token_str}\n")
+            fa.write(f"{dataset_name},{video_abs},{int(nf_video)},{token_str}\n")
     print(f"✅ Created Auto-AVSR CSV: {avsr_csv_path}")
 
 

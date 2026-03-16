@@ -84,7 +84,7 @@ python preparation/step3_metadata_prep.py \
 - **Extra Inference Artifacts**:
     - `tokens.txt`: one line per utterance (space-separated SentencePiece ids)
     - `label.csv`: one line per utterance (no header): `tcdtimit,<abs_video_path>,<space-separated-token-ids>`
-    - `tcdtimit_test_transcript_lengths_seg16s.csv`: Auto-AVSR CSV (no header, 4 cols): `tcdtimit,<rel_video_path>,<input_length>,<token_ids>`
+    - `tcdtimit_test_transcript_lengths_seg16s.csv`: Auto-AVSR CSV (no header, 4 cols): `tcdtimit,<abs_video_path>,<input_length>,<token_ids>`
 - **Training Ready**: Compatible with LRS2/LRS3 training pipelines
 
 **Default Behavior (Test-Only Manifests):**

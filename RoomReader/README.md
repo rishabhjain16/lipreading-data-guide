@@ -325,7 +325,7 @@ Step 2 writes these files next to each manifest folder it creates:
 - `label.csv`: one line per utterance (no header) in the format:
   `roomreader,<abs_video_path>,<space-separated-token-ids>`
 - `roomreader_test_transcript_lengths_seg16s.csv`: Auto-AVSR CSV (no header, 4 columns) in the format:
-  `roomreader,<rel_video_path>,<input_length>,<space-separated-token-ids>`
+  `roomreader,<abs_video_path>,<input_length>,<space-separated-token-ids>`
 
 **Default Behavior (Test-Only Manifests):**
 - Creates three metadata folders: `conversational/`, `individual/`, and `combined/`
