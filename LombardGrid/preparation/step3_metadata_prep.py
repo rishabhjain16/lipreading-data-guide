@@ -216,6 +216,17 @@ def create_metadata_for_view(view_name, view_dir, audio_frames, video_frames, va
             f.write(f"{dataset_name},{video_abs},{token_str}\n")
     print(f"✅ Created label CSV: {label_csv_path}")
 
+    # Create Auto-AVSR style 4-column CSV (matches LRS2):
+    #   dataset,rel_video_path,input_length(nframes_video),token_ids
+    avsr_csv_path = view_dir / f"{dataset_name}_test_transcript_lengths_seg16s_{view_name}.csv"
+    with open(avsr_csv_path, 'w') as f:
+        for fid, nf, label in zip(valid_fids, video_frames, valid_labels):
+            rel_vid = os.path.relpath(str((data_dir / f"{fid}.mp4").resolve()), start=str(data_dir.resolve()))
+            token_ids = text_transform.tokenize(label)
+            token_str = " ".join(str(t.item()) for t in token_ids)
+            f.write(f"{dataset_name},{rel_vid},{nf},{token_str}\n")
+    print(f"✅ Created Auto-AVSR CSV: {avsr_csv_path}")
+
     return {
         'nframes_audio': nframes_audio_path,
         'nframes_video': nframes_video_path,
@@ -224,6 +235,7 @@ def create_metadata_for_view(view_name, view_dir, audio_frames, video_frames, va
         'dict': dict_path,
         'tokens': tokens_path,
         'label_csv': label_csv_path,
+        'avsr_csv': avsr_csv_path,
     }
 
 # Create metadata for front view

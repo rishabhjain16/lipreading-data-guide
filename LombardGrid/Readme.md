@@ -122,7 +122,8 @@ Important detail: this SPM model’s vocabulary is **uppercase**, so labels are 
     │   ├── test.tsv, test.wrd
     │   ├── dict.wrd.txt
     │   ├── tokens.txt                        # One token-id sequence per utterance (SentencePiece ids)
-    │   └── label.csv                         # Simple CSV (no header): dataset,abs_video_path,token_ids
+    │   ├── label.csv                         # Simple CSV (no header): dataset,abs_video_path,token_ids
+    │   └── lombardgrid_test_transcript_lengths_seg16s_<view>.csv  # Auto-AVSR CSV (4 cols): dataset,rel_video_path,input_length,token_ids
     ├── side/                                # Side view only
     │   ├── test.tsv, test.wrd
     │   ├── dict.wrd.txt

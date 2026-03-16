@@ -215,15 +215,25 @@ def _load_shared_spm():
     return sp, sp_model_path, units_path
 
 
-def write_inference_files_from_manifests(metadata_dir: Path, dataset_name: str = "candor"):
-    """Create inference artifacts next to the manifests.
+def write_inference_files_from_manifests(
+    metadata_dir: Path,
+    data_dir: Path,
+    crop_suffix: str,
+    dataset_name: str = "candor",
+):
+    """Create shared-SPM CSVs in the same 4-column format as LRS2 Auto-AVSR.
 
     Writes for each split in {train,valid,test} where files exist:
       - <split>.tokens.txt
-      - <split>_auto_avsr.csv  (no header): dataset,abs_video_path,token_ids
+      - candor_<train|val|test>_transcript_lengths_seg16s{crop_suffix}.csv  (no header)
+
+    CSV format:
+      dataset,rel_video_path,input_length(nframes_video),token_ids
     """
     sp, sp_model_path, _ = _load_shared_spm()
     print(f"Using shared SPM model: {sp_model_path}")
+
+    split_to_csvname = {"train": "train", "valid": "val", "test": "test"}
 
     for split in ["train", "valid", "test"]:
         tsv_in = metadata_dir / f"{split}.tsv"
@@ -236,13 +246,15 @@ def write_inference_files_from_manifests(metadata_dir: Path, dataset_name: str =
             _root = ftsv.readline()
             tsv_lines = [ln.rstrip("\n") for ln in ftsv]
         video_paths = []
+        nframes_video = []
         for ln in tsv_lines:
             if not ln:
                 continue
             parts = ln.split("\t")
-            if len(parts) < 3:
+            if len(parts) < 4:
                 raise ValueError(f"Malformed TSV line in {tsv_in}: {ln[:200]}")
             video_paths.append(parts[1])
+            nframes_video.append(int(parts[3]))
 
         with open(wrd_in, "r", encoding="utf8") as fwrd:
             wrd_lines = [ln.rstrip("\n") for ln in fwrd]
@@ -254,13 +266,16 @@ def write_inference_files_from_manifests(metadata_dir: Path, dataset_name: str =
             )
 
         tokens_out = metadata_dir / f"{split}.tokens.txt"
-        csv_out = metadata_dir / f"{split}_auto_avsr.csv"
+        csv_split = split_to_csvname[split]
+        csv_out = metadata_dir / f"{dataset_name}_{csv_split}_transcript_lengths_seg16s{crop_suffix}.csv"
         with open(tokens_out, "w", encoding="utf8") as ftok, open(csv_out, "w", encoding="utf8") as fc:
-            for vid, text in zip(video_paths, wrd_lines):
+            for vid, nf, text in zip(video_paths, nframes_video, wrd_lines):
                 ids = sp.EncodeAsIds((text or "").upper())
                 token_str = " ".join(str(i) for i in ids)
                 ftok.write(token_str + "\n")
-                fc.write(f"{dataset_name},{os.path.abspath(vid)},{token_str}\n")
+                # Match LRS2 behavior: 2nd column is path relative to dataset root
+                rel_vid = os.path.relpath(os.path.abspath(vid), start=str(data_dir))
+                fc.write(f"{dataset_name},{rel_vid},{nf},{token_str}\n")
 
         print(f"   ✅ {tokens_out.name}")
         print(f"   ✅ {csv_out.name}")
@@ -419,7 +434,12 @@ def main():
     generate_training_manifests(data_dir, splits, metadata_dir, crop_suffix)
 
     # Inference-ready artifacts next to TSV/WRD
-    write_inference_files_from_manifests(metadata_dir, dataset_name="candor")
+    write_inference_files_from_manifests(
+        metadata_dir,
+        data_dir=data_dir,
+        crop_suffix=crop_suffix,
+        dataset_name="candor",
+    )
 
     # Optional legacy CSV generation (uses TextTransform + per-dataset units)
     if args.write_legacy_avsr_csv:
@@ -428,7 +448,7 @@ def main():
     print("\n✅ Candor Step 2 completed")
     print(f"   • train/valid/test.tsv + .wrd in {metadata_dir}")
     print(f"   • train/valid/test.tokens.txt in {metadata_dir}")
-    print(f"   • train/valid/test_auto_avsr.csv in {metadata_dir}")
+    print(f"   • candor_*_transcript_lengths_seg16s{crop_suffix}.csv in {metadata_dir} (shared SPM, 4 cols)")
     if args.write_legacy_avsr_csv:
         print(f"   • candor_*{crop_suffix}.csv in {labels_dir} (legacy TextTransform CSVs)")
 

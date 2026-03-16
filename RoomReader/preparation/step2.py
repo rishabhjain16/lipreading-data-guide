@@ -53,8 +53,9 @@ def write_tokens_and_label_csv(text_transform, data_dir, valid_records, out_dir,
 
     tokens_path = out_dir / "tokens.txt"
     label_csv_path = out_dir / "label.csv"
+    avsr_csv_path = out_dir / f"{dataset_name}_test_transcript_lengths_seg16s.csv"
 
-    with open(tokens_path, "w") as ftok, open(label_csv_path, "w") as fc:
+    with open(tokens_path, "w") as ftok, open(label_csv_path, "w") as fc, open(avsr_csv_path, "w") as fa:
         for r in valid_records:
             transcript = r.get("transcript", "")
             token_ids = text_transform.tokenize(transcript)
@@ -64,8 +65,17 @@ def write_tokens_and_label_csv(text_transform, data_dir, valid_records, out_dir,
             video_abs = str(Path(r["video_path"]).resolve())
             fc.write(f"{dataset_name},{video_abs},{token_str}\n")
 
+            # Auto-AVSR style 4-col CSV (matches LRS2): dataset,rel_path,input_length(nframes),token_ids
+            try:
+                nf = int(r.get("nframes", r.get("nframes_video", -1)))
+            except Exception:
+                nf = -1
+            rel_vid = os.path.relpath(video_abs, start=str(Path(data_dir).resolve()))
+            fa.write(f"{dataset_name},{rel_vid},{nf},{token_str}\n")
+
     print(f"✅ Created tokenized labels: {tokens_path}")
     print(f"✅ Created label CSV: {label_csv_path}")
+    print(f"✅ Created Auto-AVSR CSV: {avsr_csv_path}")
 
 def clean_transcript(text):
     """Clean transcript text by removing punctuation and normalizing"""

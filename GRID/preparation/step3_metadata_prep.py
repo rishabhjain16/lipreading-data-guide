@@ -293,6 +293,22 @@ with open(label_csv_path, "w") as f:
 
 print(f"✅ Created label CSV: {label_csv_path}")
 
+# Create Auto-AVSR style 4-column CSV (matches LRS2):
+#   dataset,rel_video_path,input_length(nframes_video),token_ids
+print("\nCreating Auto-AVSR 4-column CSV...")
+avsr_csv_path = metadata_dir / "grid_test_transcript_lengths_seg16s.csv"
+with open(avsr_csv_path, "w") as f:
+    for idx, (fid, label) in enumerate(zip(valid_fids, valid_labels)):
+        # Relative path is relative to dataset root (data_dir)
+        rel_vid = os.path.relpath(str((data_dir / f"{fid}.mp4").resolve()), start=str(data_dir.resolve()))
+        # Use video frame counts as input_length
+        nf = video_num_frames[idx]
+        token_ids = text_transform.tokenize(label)
+        token_str = " ".join(str(t.item()) for t in token_ids)
+        f.write(f"{dataset_name},{rel_vid},{nf},{token_str}\n")
+
+print(f"✅ Created Auto-AVSR CSV: {avsr_csv_path}")
+
 print("\n🎉 Metadata preparation complete!")
 print(f"\nOutput files:")
 print(f"  - {nframes_audio_path}")

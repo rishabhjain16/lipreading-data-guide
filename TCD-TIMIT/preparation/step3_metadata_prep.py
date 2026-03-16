@@ -142,6 +142,18 @@ def create_test_manifest(tcd_data_dir, fids, labels, nfs_audio, nfs_video, metad
             fc.write(f"{dataset_name},{video_abs},{token_str}\n")
     print(f"✅ Created label CSV: {label_csv_path}")
 
+    # Create Auto-AVSR style 4-column CSV (matches LRS2):
+    #   dataset,rel_video_path,input_length(nframes_video),token_ids
+    avsr_csv_path = metadata_dir / f"{dataset_name}_test_transcript_lengths_seg16s.csv"
+    with open(avsr_csv_path, 'w') as fa:
+        for fid, label, nf_video in zip(fids, labels, nfs_video):
+            video_abs = os.path.abspath(f"{tcd_data_dir}/{fid}.mp4")
+            rel_vid = os.path.relpath(video_abs, start=os.path.abspath(tcd_data_dir))
+            token_ids = text_transform.tokenize(label)
+            token_str = " ".join(str(t.item()) for t in token_ids)
+            fa.write(f"{dataset_name},{rel_vid},{int(nf_video)},{token_str}\n")
+    print(f"✅ Created Auto-AVSR CSV: {avsr_csv_path}")
+
 
 def check_missing_files(fids, base_dir):
     """Check for missing audio/video files"""

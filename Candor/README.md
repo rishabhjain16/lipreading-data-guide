@@ -19,11 +19,12 @@ python preparation/step2_generate_file_lists.py \
     --use-official-splits
 
 This step generates the standard AV-HuBERT manifests (`train/valid/test.tsv` + `.wrd`).
-It also generates **inference-friendly shared-SPM artifacts** next to the manifests:
+It also generates **shared-SPM tokenization outputs** next to the manifests:
 
 - `train.tokens.txt`, `valid.tokens.txt`, `test.tokens.txt`
-- `train_auto_avsr.csv`, `valid_auto_avsr.csv`, `test_auto_avsr.csv` (no header)
-    - **3 columns**: `dataset,abs_video_path,token_ids`
+- `candor_train_transcript_lengths_seg16s*.csv`, `candor_val_transcript_lengths_seg16s*.csv`, `candor_test_transcript_lengths_seg16s*.csv` (no header)
+    - **4 columns** (Auto-AVSR style, matches LRS2): `dataset,rel_video_path,input_length,token_ids`
+    - `input_length` is the **number of video frames**
     - `token_ids` are generated using the repo-wide shared SentencePiece model:
         - `spm/unigram/unigram5000.model`
         - input text is uppercased before encoding (shared vocab is uppercase)
