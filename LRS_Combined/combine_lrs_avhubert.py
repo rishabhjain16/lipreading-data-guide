@@ -78,10 +78,17 @@ def combine_datasets_multi(dataset_dirs, output_path):
 
     os.makedirs(output_path, exist_ok=True)
 
+    # required_files = [
+    #     "train.tsv", "train.wrd", "train.cluster_counts",
+    #     "test.tsv", "test.wrd", "test.cluster_counts",
+    #     "valid.tsv", "valid.wrd", "valid.cluster_counts",
+    #     "dict.wrd.txt",
+    # ]
+
     required_files = [
-        "train.tsv", "train.wrd", "train.cluster_counts",
-        "test.tsv", "test.wrd", "test.cluster_counts",
-        "valid.tsv", "valid.wrd", "valid.cluster_counts",
+        "train.tsv", "train.wrd",
+        "test.tsv", "test.wrd",
+        "valid.tsv", "valid.wrd",
         "dict.wrd.txt",
     ]
 
@@ -112,11 +119,11 @@ def combine_datasets_multi(dataset_dirs, output_path):
                 with open(os.path.join(ds, f"{split}.wrd"), 'r') as infile:
                     outfile.write(infile.read())
 
-        # cluster_counts
-        with open(os.path.join(output_path, f"{split}.cluster_counts"), 'w') as outfile:
-            for ds in dataset_dirs:
-                with open(os.path.join(ds, f"{split}.cluster_counts"), 'r') as infile:
-                    outfile.write(infile.read())
+        # # cluster_counts
+        # with open(os.path.join(output_path, f"{split}.cluster_counts"), 'w') as outfile:
+        #     for ds in dataset_dirs:
+        #         with open(os.path.join(ds, f"{split}.cluster_counts"), 'r') as infile:
+        #             outfile.write(infile.read())
     
     # --- Shared SPM outputs (dict.wrd.txt, tokens.txt, per-split CSV) ---
     # We intentionally do NOT merge per-dataset dicts here, because downstream token ids
@@ -205,11 +212,11 @@ def combine_datasets_multi(dataset_dirs, output_path):
     for split in ["train", "test", "valid"]:
         tsv_count = len(open(os.path.join(output_path, f"{split}.tsv")).readlines()) - 1  # Subtract header line
         wrd_count = len(open(os.path.join(output_path, f"{split}.wrd")).readlines())
-        cluster_count = len(open(os.path.join(output_path, f"{split}.cluster_counts")).readlines())
+        # cluster_count = len(open(os.path.join(output_path, f"{split}.cluster_counts")).readlines())
         
-        if not (tsv_count == wrd_count == cluster_count):
+        if not (tsv_count == wrd_count):  # == cluster_count):
             print(f"Warning: Line count mismatch in {split} files:")
-            print(f"  tsv: {tsv_count}, wrd: {wrd_count}, cluster_counts: {cluster_count}")
+            print(f"  tsv: {tsv_count}, wrd: {wrd_count}")
             print("  This may cause issues during training.")
         else:
             print(f"{split} set: {tsv_count} examples merged successfully")
