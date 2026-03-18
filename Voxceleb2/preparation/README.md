@@ -13,13 +13,6 @@ We provide a pre-processing pipeline in this repository for detecting and croppi
 
 Before feeding the raw stream into our model, each video sequence has to undergo a specific pre-processing procedure. This involves three critical steps. The first step is to perform face detection. Following that, each individual frame is aligned to a referenced frame, commonly known as the mean face, in order to normalize rotation and size differences across frames. The final step in the pre-processing module is to crop the mouth region from the aligned mouth image.
 
-<div align="center">
-
-<table style="display: inline-table;">
-<tr><td><img src="https://download.pytorch.org/torchaudio/doc-assets/avsr/original.gif", width="144"></td><td><img src="https://download.pytorch.org/torchaudio/doc-assets/avsr/detected.gif" width="144"></td><td><img src="https://download.pytorch.org/torchaudio/doc-assets/avsr/transformed.gif" width="144"></td><td><img src="../doc/cropped.gif" width="144"></td></tr>
-<tr><td>0. Original</td> <td>1. Detection</td> <td>2. Transformation</td> <td>3. Mouth ROIs</td> </tr>
-</table>
-</div>
 
 ## Setup
 
@@ -207,3 +200,40 @@ python merge.py \
 - `subset`: The subset name of the dataset. For `vox2`, valid value is `train`.
 - `seg-duration`: Length of the maximal segment in seconds. Default: `24`.
 - `groups`: Number of groups to split the dataset into.
+
+
+## Step 3 (New): Create Auto-AVSR/AV-HuBERT metadata files
+
+After you have:
+1) preprocessed VoxCeleb2 into segmented media (mp4 + wav), and
+2) generated transcripts via `asr_infer.py`,
+
+you can generate the same metadata artifacts used by other datasets in this repo
+(TSV/WRD/tokens/dict + Auto-AVSR 4-col CSV) with:
+
+```Shell
+python step3_metadata_prep.py \
+    --root-dir /path/to/output \
+    --dataset vox2 \
+    --seg-duration 24 \
+    --subset train \
+    --metadata-dir /path/to/output/vox2/metadata_seg24s
+```
+
+### Outputs
+
+Written under `--metadata-dir`:
+
+- `train.tsv` (with root header line)
+- `train.wrd`
+- `train.tokens.txt`
+- `dict.wrd.txt`
+- `vox2_train_transcript_lengths_seg24s.csv` (4 columns, no header):
+    `dataset,abs_video_path,input_length(nframes_video),token_ids`
+
+### Notes
+
+- Tokenization uses `Voxceleb2/preparation/transforms.py::TextTransform` (shared SPM units),
+    consistent with LRS2-style decoding.
+- The TSV uses relative paths (interpreted from the TSV header root), while the CSV stores
+    absolute video paths, matching our newer dataset convention.
