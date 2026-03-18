@@ -55,9 +55,9 @@ def calculate_duration(data_dir):
     seconds = total_duration % 60
     
     print(f"\n{'='*60}")
-    print(f"RoomReader Duration Statistics")
+    print(f"Dataset Statistics")
     print(f"{'='*60}")
-    print(f"Total videos processed: {valid_count:,}")
+    print(f"Total utterances: {valid_count:,}")
     print(f"Failed videos: {error_count:,}")
     print(f"Total frames: {total_frames:,}")
     print(f"Total duration: {hours:.2f} hours ({int(hours)}h {int(minutes)}m {int(seconds)}s)")
@@ -69,7 +69,6 @@ if __name__ == "__main__":
         print("Usage: python calculate_duration.py <path_to_roomreader_video_dir>")
         print("\nExample:")
         print("  python calculate_duration.py /media/rishabhjain/SSD/Data/RoomReader_lips/roomreader_video/conversational")
-        print("  python calculate_duration.py /media/rishabhjain/SSD/Data/RoomReader_lips/roomreader_video/individual")
         sys.exit(1)
     
     calculate_duration(sys.argv[1])
