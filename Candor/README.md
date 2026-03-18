@@ -28,7 +28,7 @@ It also generates **shared-SPM tokenization outputs** next to the manifests:
     - `token_ids` are generated using the repo-wide shared SentencePiece model:
         - `spm/unigram/unigram5000.model`
         - input text is uppercased before encoding (shared vocab is uppercase)
-
+```
 Optional (legacy) Auto-AVSR CSVs with duration + TextTransform (4 columns) can be generated with:
 
 ```bash
@@ -38,14 +38,12 @@ python preparation/step2_generate_file_lists.py \
     --write-legacy-avsr-csv
 ```
 
-# Done! Training data in ./candor_output/metadata/
+### Done! Training data in ./candor_output/metadata/
 ```
-
----
 
 ## Output Structure
 
-```
+
 candor_output/
 ├── candor_video/              # Videos + Audio
 │   └── {session_id}/

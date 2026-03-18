@@ -177,10 +177,12 @@ def split_data_by_speaker(data, split_ratios, seed=42):
 # Tokenized CSVs (TextTransform only)
 # =========================================================
 def generate_split_csvs(splits, labels_dir, crop_suffix):
-    print("📝 Generating split CSVs (Auto-AVSR format with TextTransform)...")
+    print("📝 Generating split CSVs (Auto-AVSR format using shared SentencePiece)...")
     labels_dir.mkdir(parents=True, exist_ok=True)
 
-    text_transform = TextTransform()  # uses *_units.txt automatically
+    # Use the repo-wide shared SentencePiece model so token ids match other datasets
+    sp, sp_model_path, _ = _load_shared_spm()
+    print(f"   Using shared SPM: {sp_model_path}")
 
     for split_name, split_data in splits.items():
         if not split_data:
@@ -188,12 +190,12 @@ def generate_split_csvs(splits, labels_dir, crop_suffix):
             continue
 
         csv_path = labels_dir / f"candor_{split_name}{crop_suffix}.csv"
-        with open(csv_path, 'w') as f:
+        with open(csv_path, 'w', encoding='utf8') as f:
             for record in split_data:
                 duration_frames = int(record.get('duration', 0) * 30)
-                token_ids = " ".join(
-                    str(t.item()) for t in text_transform.tokenize(record['transcript'])
-                )
+                # SentencePiece in this repo expects uppercased text
+                ids = sp.EncodeAsIds((record.get('transcript') or "").upper())
+                token_ids = " ".join(str(i) for i in ids)
                 f.write(f"candor,{record['video_path']},{duration_frames},{token_ids}\n")
 
         print(f"   ✅ {csv_path.name}")
@@ -373,6 +375,7 @@ def main():
                         help='Vocabulary size for SentencePiece model')
     parser.add_argument('--write-legacy-avsr-csv', action='store_true',
                         help='Also write legacy candor_{split}.csv using TextTransform (4 columns with duration).')
+    # (No additional filelist outputs by default)
 
     args = parser.parse_args()
 
@@ -445,6 +448,63 @@ def main():
     # Optional legacy CSV generation (uses TextTransform + per-dataset units)
     if args.write_legacy_avsr_csv:
         generate_split_csvs(splits, labels_dir, crop_suffix)
+
+    # Optional: write GRID/TCD-style file.list and label.list
+    if args.write_filelists:
+        def create_file_label_lists(metadata_dir, data_dir):
+            """Create file.list and label.list in data_dir using TSV/WRD manifests.
+
+            - file.list: relative paths (relative to data_dir) to video files, one per line
+            - label.list: cleaned transcript per line (matching order)
+            """
+            all_video_paths = []
+            all_transcripts = []
+
+            for split in ['train', 'valid', 'test']:
+                tsv_in = metadata_dir / f"{split}.tsv"
+                wrd_in = metadata_dir / f"{split}.wrd"
+                if not tsv_in.exists() or not wrd_in.exists():
+                    continue
+
+                with open(tsv_in, 'r', encoding='utf8') as ftsv:
+                    _ = ftsv.readline()  # header '/'
+                    tsv_lines = [ln.rstrip('\n') for ln in ftsv if ln.strip()]
+
+                with open(wrd_in, 'r', encoding='utf8') as fwrd:
+                    wrd_lines = [ln.rstrip('\n') for ln in fwrd]
+
+                if len(tsv_lines) != len(wrd_lines):
+                    print(f"⚠️  Line-count mismatch for {split}: {len(tsv_lines)} tsv vs {len(wrd_lines)} wrd")
+
+                for ln, wrd in zip(tsv_lines, wrd_lines):
+                    parts = ln.split('\t')
+                    if len(parts) < 2:
+                        continue
+                    video_path = parts[1]
+                    # try to relativize against data_dir when possible
+                    try:
+                        rel = os.path.relpath(video_path, start=str(data_dir))
+                    except Exception:
+                        rel = video_path
+                    all_video_paths.append(rel)
+                    all_transcripts.append(clean_transcript(wrd))
+
+            # write to data_dir
+            file_list_path = data_dir / 'file.list'
+            label_list_path = data_dir / 'label.list'
+
+            with open(file_list_path, 'w', encoding='utf8') as f:
+                for p in all_video_paths:
+                    f.write(p + '\n')
+
+            with open(label_list_path, 'w', encoding='utf8') as f:
+                for t in all_transcripts:
+                    f.write(t + '\n')
+
+            print(f"   ✅ Wrote file.list ({len(all_video_paths)} entries) to {file_list_path}")
+            print(f"   ✅ Wrote label.list ({len(all_transcripts)} entries) to {label_list_path}")
+
+        create_file_label_lists(metadata_dir, data_dir)
 
     print("\n✅ Candor Step 2 completed")
     print(f"   • train/valid/test.tsv + .wrd in {metadata_dir}")
