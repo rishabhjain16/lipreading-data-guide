@@ -361,7 +361,7 @@ def main():
                         help='Candor processed data directory (contains video files)')
     parser.add_argument('--metadata-dir', required=True,
                         help='Directory where metadata files will be created')
-    parser.add_argument('--split-ratios', type=str, default='0.7,0.15,0.15',
+    parser.add_argument('--split-ratios', type=str, default='0.8,0.1,0.1',
                         help='Train/val/test split ratios (comma-separated)')
     parser.add_argument('--split-by', type=str, default='session', choices=['session', 'speaker'],
                         help='Split by session or speaker')
@@ -376,6 +376,8 @@ def main():
     parser.add_argument('--write-legacy-avsr-csv', action='store_true',
                         help='Also write legacy candor_{split}.csv using TextTransform (4 columns with duration).')
     # (No additional filelist outputs by default)
+    parser.add_argument('--write-filelists', action='store_true', dest='write_filelists',
+                        help='Also write GRID/TCD-style file.list and label.list to the candor data directory')
 
     args = parser.parse_args()
 
