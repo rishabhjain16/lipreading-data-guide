@@ -1,76 +1,14 @@
-#!/usr/bin/env python3
 import os
 import argparse
-import shutil
 from pathlib import Path
-
+from tempfile import NamedTemporaryFile
 import sentencepiece as spm
 
-def merge_dictionaries(lrs2_dict_path, lrs3_dict_path, output_dict_path):
-    """
-    Merge two dictionary files while preserving the format and removing duplicates.
-    """
-    print("Merging dictionaries...")
-    
-    # Read dictionaries
-    lrs2_dict = {}
-    lrs3_dict = {}
-    
-    with open(lrs3_dict_path, 'r') as f:
-        for line in f:
-            parts = line.strip().split()
-            if len(parts) >= 2:
-                word = parts[0]
-                index_or_freq = parts[1]
-                lrs3_dict[word] = index_or_freq
-    
-    with open(lrs2_dict_path, 'r') as f:
-        for line in f:
-            parts = line.strip().split()
-            if len(parts) >= 2:
-                word = parts[0]
-                index_or_freq = parts[1]
-                lrs2_dict[word] = index_or_freq
-    
-    # Determine if dictionaries use indices or frequencies
-    uses_indices = all(value.isdigit() for value in list(lrs3_dict.values()))
-    
-    # Merge dictionaries
-    merged_dict = {**lrs2_dict, **lrs3_dict}  # LRS3 takes precedence for duplicates
-    
-    # If dictionaries use indices, reassign indices to be continuous
-    if uses_indices:
-        print("Dictionaries use indices, reassigning to be continuous...")
-        merged_items = sorted(merged_dict.items(), key=lambda x: int(x[1]))
-        merged_dict = {word: str(i) for i, (word, _) in enumerate(merged_items)}
-    
-    # Write merged dictionary
-    with open(output_dict_path, 'w') as f:
-        for word, value in sorted(merged_dict.items(), key=lambda x: int(x[1]) if uses_indices else x[0]):
-            f.write(f"{word} {value}\n")
-    
-    print(f"Merged dictionary created with {len(merged_dict)} entries")
-    return merged_dict
 
-def combine_datasets(lrs2_path, lrs3_path, output_path):
-    """
-    Combine LRS2 and LRS3 datasets into a single dataset for training.
-    Assumes both datasets already have .tsv, .wrd, and .cluster_counts files.
-    """
-    raise NotImplementedError("Legacy entrypoint. Use combine_datasets_multi(...)")
-
-
-def combine_datasets_multi(dataset_dirs, output_path):
-    """Combine multiple prepared metadata folders into one.
-
-    Inputs:
-      dataset_dirs: list of metadata directories, each containing:
-        train/valid/test.{tsv,wrd,cluster_counts} and dict.wrd.txt
-      output_path: output folder for combined manifests and shared-SPM outputs
-    """
+def combine_datasets_multi(dataset_dirs, output_path, vocab_size=2000):
     dataset_dirs = [str(Path(p).resolve()) for p in dataset_dirs if p]
     if len(dataset_dirs) < 2:
-        raise ValueError("Provide at least two dataset directories (d1..d6)")
+        raise ValueError("Provide at least two dataset directories")
 
     for p in dataset_dirs:
         if not os.path.exists(p):
@@ -78,99 +16,93 @@ def combine_datasets_multi(dataset_dirs, output_path):
 
     os.makedirs(output_path, exist_ok=True)
 
-    # required_files = [
-    #     "train.tsv", "train.wrd", "train.cluster_counts",
-    #     "test.tsv", "test.wrd", "test.cluster_counts",
-    #     "valid.tsv", "valid.wrd", "valid.cluster_counts",
-    #     "dict.wrd.txt",
-    # ]
-
     required_files = [
         "train.tsv", "train.wrd",
-        "test.tsv", "test.wrd",
+        "test.tsv",  "test.wrd",
         "valid.tsv", "valid.wrd",
-        "dict.wrd.txt",
     ]
-
     for ds in dataset_dirs:
-        for file in required_files:
-            fp = os.path.join(ds, file)
+        for f in required_files:
+            fp = os.path.join(ds, f)
             if not os.path.exists(fp):
-                raise FileNotFoundError(f"Required file {file} not found in {ds}")
+                raise FileNotFoundError(f"Required file {f} not found in {ds}")
 
-    print(f"Combining {len(dataset_dirs)} datasets...")
-    
-    # Merge files for each split across all datasets (keep only one TSV header)
+    print(f"Combining {len(dataset_dirs)} datasets into: {output_path}")
+
+    # ── 1. Merge TSV + WRD (lowercase) ──────────────────────────────────────
     for split in ["train", "test", "valid"]:
-        # TSV
-        with open(os.path.join(output_path, f"{split}.tsv"), 'w') as outfile:
+        # TSV (keep only one header line)
+        with open(os.path.join(output_path, f"{split}.tsv"), "w") as out:
             wrote_header = False
             for ds in dataset_dirs:
-                with open(os.path.join(ds, f"{split}.tsv"), 'r') as infile:
-                    header = infile.readline()
+                with open(os.path.join(ds, f"{split}.tsv"), "r") as inp:
+                    header = inp.readline()
                     if not wrote_header:
-                        outfile.write(header)
+                        out.write(header)
                         wrote_header = True
-                    outfile.write(infile.read())
+                    out.write(inp.read())
 
-        # WRD
-        with open(os.path.join(output_path, f"{split}.wrd"), 'w') as outfile:
+        # WRD – lowercase
+        with open(os.path.join(output_path, f"{split}.wrd"), "w", encoding="utf8") as out:
             for ds in dataset_dirs:
-                with open(os.path.join(ds, f"{split}.wrd"), 'r') as infile:
-                    outfile.write(infile.read())
+                with open(os.path.join(ds, f"{split}.wrd"), "r", encoding="utf8") as inp:
+                    for line in inp:
+                        out.write((line.rstrip("\n") or "").lower() + "\n")
 
-        # # cluster_counts
-        # with open(os.path.join(output_path, f"{split}.cluster_counts"), 'w') as outfile:
-        #     for ds in dataset_dirs:
-        #         with open(os.path.join(ds, f"{split}.cluster_counts"), 'r') as infile:
-        #             outfile.write(infile.read())
-    
-    # --- Shared SPM outputs (dict.wrd.txt, tokens.txt, per-split CSV) ---
-    # We intentionally do NOT merge per-dataset dicts here, because downstream token ids
-    # should be consistent across datasets via the repo-wide shared SPM model.
-    repo_root = Path(__file__).resolve().parents[1]
-    sp_model_path = repo_root / "spm" / "unigram" / "unigram5000.model"
-    units_path = repo_root / "spm" / "unigram" / "unigram5000_units.txt"
+    # ── 2. Train fresh SPM from combined train.wrd ───────────────────────────
+    print(f"\nTraining new SPM (vocab_size={vocab_size}) from combined train.wrd ...")
+    spm_dir = Path(output_path) / f"spm{vocab_size}" / "unigram"
+    spm_dir.mkdir(parents=True, exist_ok=True)
+    prefix = spm_dir / f"unigram{vocab_size}"
 
-    if not sp_model_path.exists():
-        raise FileNotFoundError(f"Shared SPM model not found: {sp_model_path}")
-    if not units_path.exists():
-        raise FileNotFoundError(f"Shared SPM units not found: {units_path}")
+    train_wrd = os.path.join(output_path, "train.wrd")
+    with NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf8") as tmp:
+        with open(train_wrd, "r", encoding="utf8") as f:
+            for line in f:
+                text = line.strip()
+                if text:
+                    tmp.write(text.lower() + "\n")
+        tmp_path = tmp.name
 
-    print(f"Using shared SPM model: {sp_model_path}")
-    sp = spm.SentencePieceProcessor(model_file=str(sp_model_path))
+    spm.SentencePieceTrainer.Train(
+        input=tmp_path,
+        model_prefix=str(prefix),
+        vocab_size=vocab_size,
+        model_type="unigram",
+        character_coverage=1.0,
+        pad_id=0,
+        unk_id=1,
+        bos_id=2,
+        eos_id=3,
+        user_defined_symbols="<blank>",
+    )
+    os.unlink(tmp_path)
+    print(f"  ✅ SPM model : {prefix}.model")
+    print(f"  ✅ SPM vocab : {prefix}.vocab")
 
-    # Write dict.wrd.txt from shared SPM units
+    # ── 3. Load trained SPM ──────────────────────────────────────────────────
+    sp = spm.SentencePieceProcessor(model_file=str(prefix) + ".model")
+
+    # ── 4. Write dict.wrd.txt (fairseq frequency=1 format) ──────────────────
     output_dict_path = Path(output_path) / "dict.wrd.txt"
-    with open(units_path, "r", encoding="utf8") as fi, open(output_dict_path, "w", encoding="utf8") as fo:
-        # Match other scripts: skip <unk>/<blank>/<eos> special tokens
-        for line in fi:
-            tok = line.strip().split()
-            if not tok:
-                continue
-            token = tok[0]
-            if token in {"<unk>", "<blank>", "<eos>"}:
-                continue
-            fo.write(line)
-    print(f"Wrote shared dictionary: {output_dict_path}")
+    skipped = {"<unk>", "<blank>", "<s>", "</s>", "<eos>", "<pad>"}
+    with open(output_dict_path, "w", encoding="utf8") as fo:
+        for i in range(sp.GetPieceSize()):
+            token = sp.IdToPiece(i)
+            if token not in skipped:
+                fo.write(f"{token} 1\n")
+    print(f"  ✅ dict.wrd.txt : {output_dict_path}  ({sp.GetPieceSize()} SPM tokens)")
 
-    def _write_tokens_and_label_csv(split: str):
-        """Create tokens.txt and label.csv (no header) for a split.
+    # ── 5. Write tokens.txt + auto_avsr CSV per split ────────────────────────
+    def _write_tokens(split):
+        wrd_in   = Path(output_path) / f"{split}.wrd"
+        tsv_in   = Path(output_path) / f"{split}.tsv"
+        tok_out  = Path(output_path) / f"{split}.tokens.txt"
+        csv_out  = Path(output_path) / f"{split}_auto_avsr.csv"
 
-        label.csv format:
-            lrs_combined,<abs_video_path>,<space-separated-token-ids>
-        """
-        wrd_in = Path(output_path) / f"{split}.wrd"
-        tsv_in = Path(output_path) / f"{split}.tsv"
-        tokens_out = Path(output_path) / f"{split}.tokens.txt"
-        csv_out = Path(output_path) / f"{split}_auto_avsr.csv"
-
-        if not wrd_in.exists() or not tsv_in.exists():
-            raise FileNotFoundError(f"Missing combined split files for {split}: {wrd_in} / {tsv_in}")
-
-        # Read video paths from tsv (skip header root line)
+        # Read video paths from TSV (skip root header line)
         with open(tsv_in, "r", encoding="utf8") as ftsv:
-            root = ftsv.readline()  # '/\n'
+            ftsv.readline()
             tsv_lines = [ln.rstrip("\n") for ln in ftsv]
 
         video_paths = []
@@ -187,56 +119,72 @@ def combine_datasets_multi(dataset_dirs, output_path):
 
         if len(video_paths) != len(wrd_lines):
             raise ValueError(
-                f"Line count mismatch for {split}: {tsv_in} has {len(video_paths)} examples, "
-                f"but {wrd_in} has {len(wrd_lines)} lines"
+                f"Line count mismatch for {split}: "
+                f"tsv={len(video_paths)}, wrd={len(wrd_lines)}"
             )
 
-        dataset_name = "lrs_combined"
-        with open(tokens_out, "w", encoding="utf8") as ftok, open(csv_out, "w", encoding="utf8") as fc:
+        with open(tok_out, "w", encoding="utf8") as ftok, \
+             open(csv_out, "w", encoding="utf8") as fc:
             for vid, text in zip(video_paths, wrd_lines):
-                # Shared vocab is uppercase
-                # Use SentencePiece ids as-is (0-based) and let the units-file mapping
-                # (used by TextTransform) define the 1-based IDs.
-                ids = sp.EncodeAsIds((text or "").upper())
-                token_str = " ".join(str(i) for i in ids)
-                ftok.write(token_str + "\n")
-                fc.write(f"{dataset_name},{os.path.abspath(vid)},{token_str}\n")
+                ids = sp.EncodeAsIds((text or "").lower())
+                id_str = " ".join(str(i) for i in ids)
+                ftok.write(id_str + "\n")
+                fc.write(f"lrs_combined,{os.path.abspath(vid)},{id_str}\n")
 
-        print(f"Wrote: {tokens_out}")
-        print(f"Wrote: {csv_out}")
+        print(f"  ✅ {split:5s} : {tok_out.name}  |  {csv_out.name}")
 
+    print()
     for split in ["train", "valid", "test"]:
-        _write_tokens_and_label_csv(split)
-    
-    # Verify line counts match between corresponding files
+        _write_tokens(split)
+
+    # ── 6. Sanity-check line counts ──────────────────────────────────────────
+    print()
+    all_ok = True
     for split in ["train", "test", "valid"]:
-        tsv_count = len(open(os.path.join(output_path, f"{split}.tsv")).readlines()) - 1  # Subtract header line
-        wrd_count = len(open(os.path.join(output_path, f"{split}.wrd")).readlines())
-        # cluster_count = len(open(os.path.join(output_path, f"{split}.cluster_counts")).readlines())
-        
-        if not (tsv_count == wrd_count):  # == cluster_count):
-            print(f"Warning: Line count mismatch in {split} files:")
-            print(f"  tsv: {tsv_count}, wrd: {wrd_count}")
-            print("  This may cause issues during training.")
-        else:
-            print(f"{split} set: {tsv_count} examples merged successfully")
-    
-    print(f"Combined dataset successfully created at {output_path}")
-    print("Done.")
+        tsv_n = sum(1 for _ in open(os.path.join(output_path, f"{split}.tsv"))) - 1
+        wrd_n = sum(1 for _ in open(os.path.join(output_path, f"{split}.wrd")))
+        tok_n = sum(1 for _ in open(os.path.join(output_path, f"{split}.tokens.txt")))
+        ok = tsv_n == wrd_n == tok_n
+        mark = "✅" if ok else "⚠️ "
+        print(f"  {mark} {split:5s}: tsv={tsv_n}  wrd={wrd_n}  tokens={tok_n}")
+        if not ok:
+            all_ok = False
 
+    print()
+    if all_ok:
+        print("All line counts match.")
+    else:
+        print("WARNING: line count mismatches detected above — fix before training.")
+
+    print(f"\nDone. Combined dataset → {output_path}")
+    print(f"Use this SPM in your training config:")
+    print(f"  tokenizer_bpe_model: {prefix}.model")
+
+
+# ── CLI ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Combine multiple dataset metadata folders into one (shared SPM + Auto-AVSR CSVs)")
-    parser.add_argument("--d1", required=True, help="Dataset 1 metadata dir (train/valid/test TSV+WRD+cluster_counts)")
-    parser.add_argument("--d2", required=True, help="Dataset 2 metadata dir")
-    parser.add_argument("--d3", default=None, help="Dataset 3 metadata dir")
-    parser.add_argument("--d4", default=None, help="Dataset 4 metadata dir")
-    parser.add_argument("--d5", default=None, help="Dataset 5 metadata dir")
-    parser.add_argument("--d6", default=None, help="Dataset 6 metadata dir")
-    parser.add_argument("--output", required=True, help="Path for the combined dataset")
-    
+    parser = argparse.ArgumentParser(
+        description="Combine multiple dataset metadata folders into one "
+                    "(trains fresh lowercase SPM + writes dict/tokens/CSV)."
+    )
+    parser.add_argument("--d1", required=True,  help="Dataset 1 metadata dir")
+    parser.add_argument("--d2", required=True,  help="Dataset 2 metadata dir")
+    parser.add_argument("--d3", default=None,   help="Dataset 3 metadata dir (optional)")
+    parser.add_argument("--d4", default=None,   help="Dataset 4 metadata dir (optional)")
+    parser.add_argument("--d5", default=None,   help="Dataset 5 metadata dir (optional)")
+    parser.add_argument("--d6", default=None,   help="Dataset 6 metadata dir (optional)")
+    parser.add_argument("--output",     required=True,      help="Output path for combined dataset")
+    parser.add_argument("--vocab_size", type=int, default=2000,
+                        help="SPM vocabulary size (default: 2000)")
     args = parser.parse_args()
-    
-    dirs = [args.d1, args.d2, args.d3, args.d4, args.d5, args.d6]
-    combine_datasets_multi([d for d in dirs if d], args.output)
 
-#Usage: python combine_datasets.py   --lrs2 /home/rishabh/Desktop/Datasets/lrs2_rf/lrs2/lrs2_video_seg16s/data_lrs2/   --lrs3 /home/rishabh/Desktop/Datasets/lrs3/433h_data   --output /home/rishabh/Desktop/Datasets/lrs_combined
+    dirs = [args.d1, args.d2, args.d3, args.d4, args.d5, args.d6]
+    combine_datasets_multi([d for d in dirs if d], args.output, args.vocab_size)
+
+# Usage example:
+# python combine_datasets.py \
+#   --d1 /path/to/lrs2_metadata \
+#   --d2 /path/to/lrs3_metadata \
+#   --d3 /path/to/candor_metadata \
+#   --output /path/to/combined_output \
+#   --vocab_size 2000
