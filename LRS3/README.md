@@ -34,6 +34,32 @@ This ensures proper train/validation separation and prevents data leakage.
 
 ## Complete 3-Step Workflow
 
+## Convert AV-HuBERT-prepared LRS3 to Auto-AVSR metadata
+
+If you already have AV-HuBERT manifests (for example `433h_data/` or `30h_data/` with `train/valid/test.{tsv,wrd}`), use:
+
+```bash
+python preparation/avhubert_to_auto_avsr_metadata.py \
+  --avhubert-root /path/to/lrs3 \
+  --variant 433h_data \
+  --output-metadata-dir /path/to/lrs3/metadata_auto_avsr
+```
+
+This writes:
+- `train.tsv`, `valid.tsv`, `test.tsv`
+- `train.wrd`, `valid.wrd`, `test.wrd`
+- `dict.wrd.txt` (from shared `spm/unigram/unigram5000_units.txt`)
+- `train.tokens.txt`, `valid.tokens.txt`, `test.tokens.txt`
+- `lrs3_train_transcript_lengths_seg16s.csv`, `lrs3_val_transcript_lengths_seg16s.csv`, `lrs3_test_transcript_lengths_seg16s.csv`
+
+If your source folder already directly contains the split manifests, use:
+
+```bash
+python preparation/avhubert_to_auto_avsr_metadata.py \
+  --input-metadata-dir /path/to/source_metadata \
+  --output-metadata-dir /path/to/lrs3/metadata_auto_avsr
+```
+
 ### Step 1: Video Preprocessing
 Process videos with face detection and cropping:
 
