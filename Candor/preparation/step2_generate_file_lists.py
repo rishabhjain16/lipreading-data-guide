@@ -20,6 +20,7 @@ from collections import defaultdict
 import random
 import re
 import shutil
+from tempfile import NamedTemporaryFile
 
 import sentencepiece as spm
 
@@ -176,13 +177,11 @@ def split_data_by_speaker(data, split_ratios, seed=42):
 # =========================================================
 # Tokenized CSVs (TextTransform only)
 # =========================================================
-def generate_split_csvs(splits, labels_dir, crop_suffix):
-    print("📝 Generating split CSVs (Auto-AVSR format using shared SentencePiece)...")
+def generate_split_csvs(splits, labels_dir, crop_suffix, sp, sp_model_path, use_shared_spm):
+    sp_type = "shared" if use_shared_spm else "candor-specific"
+    print(f"📝 Generating split CSVs (Auto-AVSR format using {sp_type} SentencePiece)...")
     labels_dir.mkdir(parents=True, exist_ok=True)
-
-    # Use the repo-wide shared SentencePiece model so token ids match other datasets
-    sp, sp_model_path, _ = _load_shared_spm()
-    print(f"   Using shared SPM: {sp_model_path}")
+    print(f"   Using SPM: {sp_model_path}")
 
     for split_name, split_data in splits.items():
         if not split_data:
@@ -193,8 +192,8 @@ def generate_split_csvs(splits, labels_dir, crop_suffix):
         with open(csv_path, 'w', encoding='utf8') as f:
             for record in split_data:
                 duration_frames = int(record.get('duration', 0) * 30)
-                # SentencePiece in this repo expects uppercased text
-                ids = sp.EncodeAsIds((record.get('transcript') or "").upper())
+                text = clean_transcript(record.get('transcript'))
+                ids = sp.EncodeAsIds(_normalize_for_spm(text, use_shared_spm))
                 token_ids = " ".join(str(i) for i in ids)
                 f.write(f"candor,{record['video_path']},{duration_frames},{token_ids}\n")
 
@@ -217,10 +216,68 @@ def _load_shared_spm():
     return sp, sp_model_path, units_path
 
 
+def _train_candor_spm_from_train_wrd(metadata_dir: Path, vocab_size: int):
+    """Train a fresh Candor SPM from metadata_dir/train.wrd and return processor + paths."""
+    train_wrd = metadata_dir / "train.wrd"
+    if not train_wrd.exists():
+        raise FileNotFoundError(
+            f"Cannot train Candor SPM because train.wrd was not found: {train_wrd}"
+        )
+
+    spm_dir = metadata_dir / f"spm{vocab_size}" / "unigram"
+    spm_dir.mkdir(parents=True, exist_ok=True)
+    prefix = spm_dir / f"unigram{vocab_size}"
+
+    print(f"\n🧠 Training new Candor SPM (vocab_size={vocab_size}) from {train_wrd} ...")
+    with NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf8") as tmp:
+        with open(train_wrd, "r", encoding="utf8") as fin:
+            for line in fin:
+                text = line.strip()
+                if text:
+                    tmp.write(text.lower() + "\n")
+        tmp_path = tmp.name
+
+    try:
+        spm.SentencePieceTrainer.Train(
+            input=tmp_path,
+            model_prefix=str(prefix),
+            vocab_size=vocab_size,
+            model_type="unigram",
+            character_coverage=1.0,
+            pad_id=0,
+            unk_id=1,
+            bos_id=2,
+            eos_id=3,
+            user_defined_symbols="<blank>",
+        )
+    finally:
+        os.unlink(tmp_path)
+
+    sp_model_path = Path(str(prefix) + ".model")
+    sp_vocab_path = Path(str(prefix) + ".vocab")
+    units_path = spm_dir / f"unigram{vocab_size}_units.txt"
+    create_units_file(sp_vocab_path, units_path)
+
+    sp = spm.SentencePieceProcessor(model_file=str(sp_model_path))
+    print(f"   ✅ SPM model : {sp_model_path}")
+    print(f"   ✅ SPM vocab : {sp_vocab_path}")
+    print(f"   ✅ units file: {units_path}")
+    return sp, sp_model_path, units_path
+
+
+def _normalize_for_spm(text: str, use_shared_spm: bool) -> str:
+    txt = text or ""
+    # Shared repo SPM expects uppercase text; custom Candor SPM is trained on lowercase.
+    return txt.upper() if use_shared_spm else txt.lower()
+
+
 def write_inference_files_from_manifests(
     metadata_dir: Path,
     data_dir: Path,
     crop_suffix: str,
+    sp,
+    sp_model_path: Path,
+    use_shared_spm: bool,
     dataset_name: str = "candor",
 ):
     """Create shared-SPM CSVs in the same 4-column format as LRS2 Auto-AVSR.
@@ -232,8 +289,8 @@ def write_inference_files_from_manifests(
     CSV format:
       dataset,rel_video_path,input_length(nframes_video),token_ids
     """
-    sp, sp_model_path, _ = _load_shared_spm()
-    print(f"Using shared SPM model: {sp_model_path}")
+    sp_type = "shared" if use_shared_spm else "candor-specific"
+    print(f"Using {sp_type} SPM model: {sp_model_path}")
 
     split_to_csvname = {"train": "train", "valid": "val", "test": "test"}
 
@@ -274,7 +331,7 @@ def write_inference_files_from_manifests(
             for vid, nf, text in zip(video_paths, nframes_video, wrd_lines):
                 # Use SentencePiece ids as-is (0-based) and let the units-file mapping
                 # (used by TextTransform) define the 1-based IDs.
-                ids = sp.EncodeAsIds((text or "").upper())
+                ids = sp.EncodeAsIds(_normalize_for_spm(text, use_shared_spm))
                 token_str = " ".join(str(i) for i in ids)
                 ftok.write(token_str + "\n")
                 video_abs = os.path.abspath(vid)
@@ -371,8 +428,8 @@ def main():
                         help='Use official train/val/test splits')
     parser.add_argument('--splits-dir', type=str, default='./splits',
                         help='Directory containing candor-train.id, candor-valid.id, candor-test.id')
-    parser.add_argument('--vocab-size', type=int, default=1000,
-                        help='Vocabulary size for SentencePiece model')
+    parser.add_argument('--vocab-size', type=int, default=None,
+                        help='If provided, train a new Candor SPM of this size from train.wrd in metadata-dir; otherwise use shared repo SPM.')
     parser.add_argument('--write-legacy-avsr-csv', action='store_true',
                         help='Also write legacy candor_{split}.csv using TextTransform (4 columns with duration).')
     # (No additional filelist outputs by default)
@@ -429,27 +486,37 @@ def main():
             splits = split_data_by_speaker(all_data, split_ratios, args.seed)
 
     # =====================================================
-    # NOTE: We no longer train a Candor-specific SentencePiece model here.
-    # We use the repo-wide shared SPM (spm/unigram/unigram5000.model) so token ids
-    # are consistent across datasets.
-    # =====================================================
-
-    # =====================================================
     # Manifests + tokenized CSVs
     # =====================================================
     generate_training_manifests(data_dir, splits, metadata_dir, crop_suffix)
+
+    # Select tokenizer: default shared SPM; optional Candor-specific SPM when --vocab-size is provided.
+    use_shared_spm = args.vocab_size is None
+    if not use_shared_spm and args.vocab_size <= 0:
+        print("❌ --vocab-size must be a positive integer")
+        return 1
+
+    if use_shared_spm:
+        sp, sp_model_path, _ = _load_shared_spm()
+        print(f"🔤 Using default shared SPM: {sp_model_path}")
+    else:
+        sp, sp_model_path, _ = _train_candor_spm_from_train_wrd(metadata_dir, args.vocab_size)
+        print(f"🔤 Using newly trained Candor SPM: {sp_model_path}")
 
     # Inference-ready artifacts next to TSV/WRD
     write_inference_files_from_manifests(
         metadata_dir,
         data_dir=data_dir,
         crop_suffix=crop_suffix,
+        sp=sp,
+        sp_model_path=sp_model_path,
+        use_shared_spm=use_shared_spm,
         dataset_name="candor",
     )
 
     # Optional legacy CSV generation (uses TextTransform + per-dataset units)
     if args.write_legacy_avsr_csv:
-        generate_split_csvs(splits, labels_dir, crop_suffix)
+        generate_split_csvs(splits, labels_dir, crop_suffix, sp, sp_model_path, use_shared_spm)
 
     # Optional: write GRID/TCD-style file.list and label.list
     if args.write_filelists:
