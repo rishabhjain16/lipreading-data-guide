@@ -70,7 +70,7 @@ def create_speaker_mapping(participants):
     unique_participants = sorted(set(participants))
     return {p: f"spk{i}" for i, p in enumerate(unique_participants)}
 
-def process_roomreader_session(transcript_file, video_dir, output_path, text_path, landmarks_detector, video_process, args, output_size):
+def process_roomreader_session(transcript_file, video_dir, output_path, text_path, landmarks_detector, video_process, args, output_size, combined_av_path=None):
     """Process a single RoomReader session with RetinaFace detection"""
     
     session_name = transcript_file.stem  # S01, S02, etc.
@@ -188,6 +188,27 @@ def process_roomreader_session(transcript_file, video_dir, output_path, text_pat
                     video_fps=info['video_fps'],  # Use original video FPS
                     audio_sample_rate=16000,
                 )
+
+                # Save combined AV file if requested (for sanity checking)
+                if combined_av_path is not None:
+                    combined_av_session_path = combined_av_path / session_name
+                    combined_av_session_path.mkdir(parents=True, exist_ok=True)
+
+                    dst_combined_filename = combined_av_session_path / f"{utterance_id}_av.mp4"
+                    dst_combined_txt_filename = combined_av_session_path / f"{utterance_id}.txt"
+
+                    torchvision.io.write_video(
+                        str(dst_combined_filename),
+                        video_data,
+                        fps=info.get('video_fps', 30),
+                        audio_array=audio_data,
+                        audio_fps=16000,
+                        audio_codec='aac'
+                    )
+
+                    # Save transcript alongside AV sanity-check clip
+                    with open(dst_combined_txt_filename, 'w', encoding='utf-8') as f:
+                        f.write(utterance['text'])
                 
                 # Add to processed data for CSV (LRS format)
                 rel_video_path = f"{args.video_mode}/{session_name}/{utterance_id}.mp4"
@@ -216,17 +237,23 @@ def main(args):
     output_path = Path(args.output_path)
     
     # Create output directories with crop type and size suffixes like TCD-TIMIT
-    crop_suffix = f"_{args.crop_type}" if args.crop_type != "lips" else ""
+    crop_suffix = f"_{args.crop_type}"
     output_size = 96 if args.crop_type == "lips" else 224
-    size_suffix = f"_{output_size}x{output_size}" if output_size != 96 else ""
     detector_suffix = f"_{args.detector}" if args.detector != "retinaface" else ""
     
-    final_output_path = output_path / f"roomreader_video{crop_suffix}{size_suffix}{detector_suffix}" / args.video_mode
+    final_output_path = output_path / f"roomreader_video{crop_suffix}{detector_suffix}" / args.video_mode
     final_output_path.mkdir(parents=True, exist_ok=True)
     
     # Create separate text directory like other datasets
-    text_output_path = output_path / f"roomreader_text{crop_suffix}{size_suffix}{detector_suffix}" / args.video_mode
+    text_output_path = output_path / f"roomreader_text{crop_suffix}{detector_suffix}" / args.video_mode
     text_output_path.mkdir(parents=True, exist_ok=True)
+
+    # Create combined AV directory if requested
+    combined_av_path = None
+    if args.save_combined_av:
+        combined_av_path = output_path / f"roomreader_av{crop_suffix}{detector_suffix}" / args.video_mode
+        combined_av_path.mkdir(parents=True, exist_ok=True)
+        print(f"Combined AV files will be saved to: {combined_av_path}")
     
     # Initialize RetinaFace detector at module level like TCD-TIMIT
     if args.detector == "retinaface":
@@ -277,6 +304,7 @@ def main(args):
     print(f"Video mode: {args.video_mode}")
     print(f"Crop type: {args.crop_type} ({output_size}x{output_size})")
     print(f"Detector: {args.detector}")
+    print(f"Combined AV: {'Yes (for sanity checking)' if args.save_combined_av else 'No'}")
     
     # Collect all processed data for CSV
     all_processed_data = []
@@ -299,7 +327,7 @@ def main(args):
                 
             processed_data = process_roomreader_session(
                 transcript_file, session_video_dir, session_output_path, session_text_path,
-                landmarks_detector, video_process, args, output_size
+                landmarks_detector, video_process, args, output_size, combined_av_path
             )
             all_processed_data.extend(processed_data)
             
@@ -313,10 +341,9 @@ def main(args):
         labels_dir.mkdir(parents=True, exist_ok=True)
         
         # Follow TCD-TIMIT/LRS naming pattern
-        crop_suffix = f"_{args.crop_type}" if args.crop_type != "lips" else ""
-        size_suffix = f"_{output_size}x{output_size}" if output_size != 96 else ""
+        crop_suffix = f"_{args.crop_type}"
         detector_suffix = f"_{args.detector}" if args.detector != "retinaface" else ""
-        csv_filename = f"roomreader_{args.video_mode}{crop_suffix}{size_suffix}{detector_suffix}.csv"
+        csv_filename = f"roomreader_{args.video_mode}{crop_suffix}{detector_suffix}.csv"
         csv_path = labels_dir / csv_filename
         
         # Create DataFrame with LRS-compatible structure
@@ -341,6 +368,8 @@ if __name__ == "__main__":
     parser.add_argument('--crop-type', choices=['lips', 'face'], default='lips',
                         help='Crop type: lips (96x96, mouth region) or face (224x224, full face)')
     parser.add_argument('--detector', default='retinaface', help='Face detector to use')
+    parser.add_argument('--save-combined-av', action='store_true',
+                        help='Save combined audio+video files in _av folder for sanity checking')
     args = parser.parse_args()
     
     main(args)

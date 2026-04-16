@@ -30,6 +30,10 @@ def calculate_duration(data_dir):
     total_duration = 0
     valid_count = 0
     error_count = 0
+    shortest_duration = float("inf")
+    shortest_path = None
+    longest_duration = 0.0
+    longest_path = None
     
     for video_path in tqdm(video_files, desc="Processing videos"):
         try:
@@ -43,6 +47,14 @@ def calculate_duration(data_dir):
                 total_frames += frame_count
                 total_duration += duration
                 valid_count += 1
+
+                if duration < shortest_duration:
+                    shortest_duration = duration
+                    shortest_path = video_path
+
+                if duration > longest_duration:
+                    longest_duration = duration
+                    longest_path = video_path
             else:
                 error_count += 1
         except Exception as e:
@@ -61,7 +73,10 @@ def calculate_duration(data_dir):
     print(f"Failed videos: {error_count:,}")
     print(f"Total frames: {total_frames:,}")
     print(f"Total duration: {hours:.2f} hours ({int(hours)}h {int(minutes)}m {int(seconds)}s)")
-    print(f"Average duration per video: {total_duration/valid_count:.2f} seconds")
+    if valid_count > 0:
+        print(f"Average duration per video: {total_duration/valid_count:.2f} seconds")
+        print(f"Shortest file: {shortest_duration:.2f} seconds | {shortest_path}")
+        print(f"Longest file: {longest_duration:.2f} seconds | {longest_path}")
     print(f"{'='*60}")
 
 if __name__ == "__main__":

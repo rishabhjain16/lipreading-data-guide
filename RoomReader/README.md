@@ -132,6 +132,15 @@ python preparation/step1_prepare_roomreader.py \
     --video-mode conversational \
     --crop-type lips \
     --detector retinaface
+
+# Save combined audio+video sanity-check clips (AV mode)
+python preparation/step1_prepare_roomreader.py \
+  --data-path /media/rishabhjain/SSD/RoomReader/ \
+  --output-path /media/rishabhjain/SSD/RR_processed \
+  --video-mode individual \
+  --crop-type lips \
+  --detector retinaface \
+  --save-combined-av
 ```
 
 #### Arguments
@@ -145,6 +154,8 @@ python preparation/step1_prepare_roomreader.py \
   - `lips`: Mouth region cropping (96x96) for lip reading
   - `face`: Full face cropping (224x224) for facial expression analysis
 - `--detector`: Face detector to use (`retinaface` recommended)
+- `--save-combined-av`: Save combined audio+video sanity-check clips to:
+  - `roomreader_av/<mode>/<session>/<utterance_id>_av.mp4`
 
 #### Processing Statistics
 
