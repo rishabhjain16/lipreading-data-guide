@@ -92,7 +92,7 @@ For other sessions, refer to the Pre-Recording Questionnaire in the documentatio
 
 ## Preprocessing Pipeline
 
-The RoomReader preprocessing follows a complete 2-step pipeline that processes the dataset into lip reading ready format:
+The RoomReader preprocessing follows a complete 3-step pipeline that processes the dataset into lip reading ready format:
 
 ### Step 1: Complete Video Preprocessing with Face Detection
 
@@ -292,6 +292,16 @@ ls /path/to/output/roomreader_video_lips/individual/S01/
    find ./roomreader_processed -name "*.mp4" | wc -l
    ```
 
+5. **Optional Duration Filtering (Step 3)**:
+   ```bash
+   # Keep clips in (1.0, 30.0] seconds and copy to a new filtered dataset root
+   python preparation/filter_roomreader_by_duration.py \
+     --src-root ./roomreader_processed \
+     --dst-root ./roomreader_processed_filtered_1to30s \
+     --min-duration-sec 1.0 \
+     --max-duration-sec 30.0
+   ```
+
 ## Citation
 
 
@@ -377,6 +387,43 @@ python step2.py \
 - `--create-mode-splits`: Creates separate metadata folders for conversational and individual modes (requires --split-ratios)
 - `--random-split`: Use random splitting instead of speaker-based splitting
 - `--seed`: Random seed for reproducible splits (default: 42)
+
+### Step 3: Duration-Based Dataset Filtering (`filter_roomreader_by_duration.py`)
+Filters processed RoomReader clips by duration and copies only kept samples to a new output root while preserving folder structure.
+
+**What it filters/copies:**
+- `roomreader_video_*` (`.mp4`, `.wav`)
+- `roomreader_text_*` (`.txt`)
+- `roomreader_av_*` (`*_av.mp4` and transcript `.txt`, if present)
+- `labels/roomreader_*.csv` (rows filtered by `unique_id`)
+
+**Duration rules:**
+- Always applies lower bound: keep clips with duration `> --min-duration-sec`
+- Optional upper bound: keep clips with duration `<= --max-duration-sec`
+
+**Stats + logs:**
+- Prints duration histogram at start: `0-1s`, `1-2s`, ..., `29-30s`, `>=30s`
+- Writes dropped-file logs into destination root:
+  - `dropped_lt_<min>s.txt` (below min)
+  - `dropped_gt_<max>s.txt` (above max, only if max is provided)
+- Log row format:
+  - `relative_wav_path<TAB>duration_seconds<TAB>transcript`
+
+**Usage:**
+```bash
+# Keep clips longer than 1 second
+python preparation/filter_roomreader_by_duration.py \
+  --src-root /path/to/roomreader_processed \
+  --dst-root /path/to/roomreader_processed_gt1s \
+  --min-duration-sec 1.0
+
+# Keep clips in (1.0, 30.0] seconds
+python preparation/filter_roomreader_by_duration.py \
+  --src-root /path/to/roomreader_processed \
+  --dst-root /path/to/roomreader_processed_1to30s \
+  --min-duration-sec 1.0 \
+  --max-duration-sec 30.0
+```
 
 ## Output Format
 
