@@ -12,37 +12,29 @@ python preparation/step1_prepare_candor.py \
     --output-path ./candor_output \
     --crop-type lips
 
-# Step 2: Generate training manifests
-python preparation/step2_generate_file_lists.py \
+# Step 2: Create splits and manifests
+python preparation/step2_split_unseen.py \
     --candor-data-dir ./candor_output/candor_video \
     --metadata-dir ./candor_output/metadata \
-    --use-official-splits
+    --splits-dir ./splits \
+    --use-existing-splits
 
-This step generates the standard AV-HuBERT manifests (`train/valid/test.tsv` + `.wrd`).
-It also generates **shared-SPM tokenization outputs** next to the manifests:
-
-- `train.tokens.txt`, `valid.tokens.txt`, `test.tokens.txt`
-- `candor_train_transcript_lengths_seg16s*.csv`, `candor_val_transcript_lengths_seg16s*.csv`, `candor_test_transcript_lengths_seg16s*.csv` (no header)
-    - **4 columns** (Auto-AVSR style): `dataset,abs_video_path,input_length,token_ids`
-    - `input_length` is the **number of video frames**
-    - `token_ids` are generated using the repo-wide shared SentencePiece model:
-        - `spm/unigram/unigram5000.model`
-        - input text is uppercased before encoding (shared vocab is uppercase)
-```
-Optional (legacy) Auto-AVSR CSVs with duration + TextTransform (4 columns) can be generated with:
-
-```bash
-python preparation/step2_generate_file_lists.py \
-    --candor-data-dir /path/to/candor_processed \
-    --metadata-dir /path/to/metadata \
-    --write-legacy-avsr-csv
+# Step 3: Train SPM tokenizer (if needed)
+python preparation/step3_train_candor_spm.py \
+    --metadata-dir ./candor_output/metadata \
+    --vocab-size 5000
 ```
 
-### Done! Training data in ./candor_output/metadata/
-```
+- Step 2 generates the standard AV-HuBERT manifests (`train/valid/test.tsv` + `.wrd`) using official or custom splits.
+- Step 3 trains a SentencePiece model from `train.wrd` and writes:
+  - `spm5000/unigram/unigram5000.model` (SPM model)
+  - `spm5000/unigram/unigram5000.vocab` (SPM vocab)
+  - `spm5000/unigram/unigram5000_units.txt` (for TextTransform)
+  - `dict.wrd.txt` (Fairseq-style dictionary)
 
-## Output Structure
+**Note:** The legacy `step2_generate_file_lists.py` is no longer required for the standard workflow. Use it only for legacy/compatibility purposes.
 
+### Output Structure
 
 candor_output/
 ├── candor_video/              # Videos + Audio
@@ -58,10 +50,15 @@ candor_output/
 │   └── candor_test.csv       # Test split (Auto-AVSR format with SPM tokens)
 └── metadata/                  # AV-HuBERT format (from Step 2)
     ├── train.tsv, valid.tsv, test.tsv
-    └── train.wrd, valid.wrd, test.wrd
-```
+    ├── train.wrd, valid.wrd, test.wrd
+    ├── spm5000/
+    │   └── unigram/
+    │       ├── unigram5000.model
+    │       ├── unigram5000.vocab
+    │       └── unigram5000_units.txt
+    └── dict.wrd.txt
 
-**Note**: CSV files use SentencePiece tokenization (spm1000 by default) for Auto-AVSR compatibility.
+**Note**: SPM files are created in Step 3. Tokenization for downstream tasks should use the model and units file from `spm5000/unigram/`.
 
 ---
 
@@ -74,10 +71,12 @@ candor_output/
 - `--filter-fillers`: Filter filler-only phrases (uhm, uh, etc.)
 - `--save-combined-av`: Save combined AV files for sanity checking
 
-**Step 2 (Manifest Generation)**:
-- `--use-official-splits`: Use fixed train/val/test splits (recommended)
-- `--split-by`: `session` or `speaker` (if not using official splits)
-- `--spm-model`: Path to SentencePiece model (default: uses spm1000)
+**Step 2 (Splits & Manifests)**:
+- `--use-existing-splits`: Use fixed train/val/test splits (recommended)
+- `--splits-dir`: Directory containing `candor-train.id`, `candor-valid.id`, `candor-test.id`
+
+**Step 3 (SPM Training)**:
+- `--vocab-size`: Vocabulary size for SentencePiece model (e.g., 5000)
 
 ---
 
@@ -87,15 +86,15 @@ The `splits/` folder contains fixed train/val/test splits so everyone uses the s
 
 **Using official splits** (recommended):
 ```bash
-python preparation/step2_generate_file_lists.py \
+python preparation/step2_split_unseen.py \
     --candor-data-dir ./candor_output/candor_video \
     --metadata-dir ./candor_output/metadata \
-    --use-official-splits
+    --splits-dir ./splits \
+    --use-existing-splits
 ```
 
 **Creating new splits** (only if processing full dataset for first time):
 ```bash
-# After Step 1, before Step 2
 python preparation/create_official_splits.py \
     --candor-data-dir ./candor_output/candor_video \
     --output-dir ./splits \
@@ -115,6 +114,16 @@ python preparation/step1_prepare_candor.py \
     --speechmatics-path /path/to/candor_speechmatics \
     --output-path ./candor_output \
     --crop-type lips
+
+python preparation/step2_split_unseen.py \
+    --candor-data-dir ./candor_output/candor_video \
+    --metadata-dir ./candor_output/metadata \
+    --splits-dir ./splits \
+    --use-existing-splits
+
+python preparation/step3_train_candor_spm.py \
+    --metadata-dir ./candor_output/metadata \
+    --vocab-size 5000
 ```
 
 **With sanity check**:
