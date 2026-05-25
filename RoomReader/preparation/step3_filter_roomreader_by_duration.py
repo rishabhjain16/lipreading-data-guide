@@ -1,369 +1,388 @@
 #!/usr/bin/env python3
-"""
-Filter processed RoomReader dataset by clip duration and copy kept samples.
+"""RoomReader Step 3: Create RR_easy and RR_hard subsets from Step 2 metadata.
 
-What it does:
-1) Scans processed RoomReader video folders under --src-root (roomreader_video*).
-2) Computes duration from each .wav file.
-3) Keeps samples with duration strictly greater than --min-duration-sec and
-    (optionally) less than or equal to --max-duration-sec.
-4) Copies matching files to --dst-root while preserving folder layout:
-   - video/audio: roomreader_video*/<mode>/<session>/<id>.mp4|.wav
-   - text:        roomreader_text*/<mode>/<session>/<id>.txt
-   - AV mode:     roomreader_av*/<mode>/<session>/<id>_av.mp4 and <id>.txt
-5) Writes filtered CSVs in dst labels/ for roomreader_*.csv files if present.
+This script takes a *single* Step-2 metadata folder (e.g. `meta/combined/`) that
+contains `test.tsv` and `test.wrd`, and splits utterances into:
+
+- RR_hard: duration <= threshold seconds (default 2.0)
+- RR_easy: duration >  threshold seconds
+
+For each subset it writes:
+- AV-HuBERT-style manifests: test.tsv + test.wrd
+- Token helpers: test.tokens.txt + label.csv
+- Auto-AVSR 4-col CSV: <subset>_test_transcript_lengths_seg16s.csv
+- Stats: stats.json + stats.txt (includes total duration in hours and word count stats)
+
+Notes
+- Duration is estimated from `nframes_video / --fps` using the frame count in TSV.
+- Tokenization uses repo `TextTransform()` (shared SPM setup in this repo).
 
 Example:
-    python preparation/filter_roomreader_by_duration.py \
-        --src-root /media/rishabhjain/SSD/Data/Roomreader-AV \
-        --dst-root /media/rishabhjain/SSD/Data/Roomreader-AV-filtered \
-        --min-duration-sec 1.0
-
-    # Keep only (1.0, 30.0] seconds
-    python preparation/filter_roomreader_by_duration.py \
-        --src-root /media/rishabhjain/SSD/Data/Roomreader-AV \
-        --dst-root /media/rishabhjain/SSD/Data/Roomreader-AV-filtered-1to30 \
-        --min-duration-sec 1.0 \
-        --max-duration-sec 30.0
+  python RoomReader/preparation/step3_filter_roomreader_by_duration.py \
+    --metadata-dir /data/.../meta/combined \
+    --output-dir   /data/.../meta_split
 """
 
 from __future__ import annotations
 
 import argparse
-import csv
-import shutil
+import json
+import re
+import statistics
 import wave
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Tuple
+
+from transforms import TextTransform
 
 
-def wav_duration_seconds(wav_path: Path) -> float:
-    """Get WAV duration in seconds using stdlib only."""
-    with wave.open(str(wav_path), "rb") as wf:
-        nframes = wf.getnframes()
-        framerate = wf.getframerate()
-        if framerate <= 0:
-            return 0.0
-        return float(nframes) / float(framerate)
+def read_test_tsv_wrd(metadata_dir: Path) -> List[Dict]:
+    tsv_path = metadata_dir / "test.tsv"
+    wrd_path = metadata_dir / "test.wrd"
+    if not tsv_path.exists() or not wrd_path.exists():
+        raise FileNotFoundError(f"Expected test.tsv and test.wrd in: {metadata_dir}")
 
+    with open(tsv_path, "r", encoding="utf8") as f:
+        lines = [ln.rstrip("\n") for ln in f if ln.strip()]
 
-def safe_copy(src: Path, dst: Path) -> bool:
-    """Copy file if source exists; create parent dirs. Returns True if copied."""
-    if not src.exists():
-        return False
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, dst)
-    return True
+    if not lines:
+        return []
 
+    # AV-HuBERT style header is just '/'
+    if lines[0].strip() == "/":
+        lines = lines[1:]
 
-def parse_video_root(video_root: Path) -> Tuple[str, str]:
-    """Split roomreader_video_lips[_det]/mode path into (video_root_name, mode)."""
-    # Expected: <src_root>/<video_root_name>/<mode>
-    mode = video_root.name
-    video_root_name = video_root.parent.name
-    return video_root_name, mode
+    with open(wrd_path, "r", encoding="utf8") as f:
+        wrds = [ln.rstrip("\n") for ln in f]
 
-
-def corresponding_root_name(video_root_name: str, target_prefix: str) -> str:
-    """Map roomreader_video_* -> roomreader_text_* or roomreader_av_*"""
-    if video_root_name.startswith("roomreader_video"):
-        return video_root_name.replace("roomreader_video", target_prefix, 1)
-    return f"{target_prefix}_{video_root_name}"
-
-
-def read_transcript_if_exists(txt_path: Path) -> str:
-    """Read transcript text if present; return empty string otherwise."""
-    if not txt_path.exists():
-        return ""
-    try:
-        return txt_path.read_text(encoding="utf-8").strip()
-    except Exception:
-        return ""
-
-
-def print_duration_histogram(durations: List[float], max_sec: int = 30) -> None:
-    """Print histogram buckets: 0-1, 1-2, ..., 29-30, and >30 seconds."""
-    bins = [0 for _ in range(max_sec)]  # index i => [i, i+1)
-    overflow = 0
-
-    for d in durations:
-        if d < 0:
-            continue
-        if d >= max_sec:
-            overflow += 1
-        else:
-            bins[int(d)] += 1
-
-    print("\n=== Duration stats (all scanned clips) ===")
-    for i, count in enumerate(bins):
-        print(f"{i:02d}-{i+1:02d}s: {count}")
-    print(f">={max_sec}s: {overflow}")
-
-
-def collect_kept_ids_and_copy(
-    src_root: Path,
-    dst_root: Path,
-    min_duration: float,
-    max_duration: float | None = None,
-) -> Dict[str, Set[str]]:
-    """
-    Copy kept media/text/av files and return kept IDs by mode.
-
-    Returns:
-        dict: {"individual": {id1, id2}, "conversational": {...}}
-    """
-    kept_by_mode: Dict[str, Set[str]] = {}
-
-    # Find all mode folders under roomreader_video* roots
-    video_mode_dirs = []
-    for video_parent in sorted(src_root.glob("roomreader_video*")):
-        if not video_parent.is_dir():
-            continue
-        for mode_dir in sorted(video_parent.iterdir()):
-            if mode_dir.is_dir() and mode_dir.name in {"individual", "conversational"}:
-                video_mode_dirs.append(mode_dir)
-
-    if not video_mode_dirs:
-        raise FileNotFoundError(
-            f"No processed RoomReader video folders found under: {src_root}\n"
-            "Expected folders like roomreader_video_lips/individual/..."
+    if len(lines) != len(wrds):
+        raise ValueError(
+            f"Line mismatch: {tsv_path} has {len(lines)} examples, {wrd_path} has {len(wrds)} lines"
         )
 
-    copied = {
-        "video_mp4": 0,
-        "audio_wav": 0,
-        "text_txt": 0,
-        "av_mp4": 0,
-        "av_txt": 0,
+    records: List[Dict] = []
+    for ln, text in zip(lines, wrds):
+        parts = ln.split("\t")
+        if len(parts) < 4:
+            continue
+
+        unique_id = parts[0]
+        video_path = parts[1]
+        audio_path = parts[2]
+        try:
+            nframes_video = int(parts[3])
+        except Exception:
+            nframes_video = -1
+
+        nframes_audio = None
+        if len(parts) >= 5:
+            try:
+                nframes_audio = int(parts[4])
+            except Exception:
+                nframes_audio = None
+
+        records.append(
+            {
+                "unique_id": unique_id,
+                "video_path": video_path,
+                "audio_path": audio_path,
+                "nframes_video": nframes_video,
+                "nframes_audio": nframes_audio,
+                "transcript": text.strip(),
+            }
+        )
+
+    return records
+
+
+def compute_duration_sec(record: Dict, fps: float) -> Tuple[float, str]:
+    """Compute duration by reading the audio file on disk.
+
+    This is intentionally simple and follows your requirement:
+    - Use audio file duration as ground truth.
+    - Do not rely on manifest frame counts.
+    - No caching.
+
+    The audio path comes from the TSV's 3rd column.
+
+    Returns (duration_seconds, source) where source is:
+    - "audio_wav": duration read from wav header
+    """
+
+    audio_path = record.get("audio_path")
+    if not isinstance(audio_path, str) or not audio_path:
+        raise ValueError(f"Record {record.get('unique_id')} missing audio_path")
+
+    try:
+        with wave.open(audio_path, "rb") as wf:
+            nframes = wf.getnframes()
+            fr = wf.getframerate()
+            if fr <= 0:
+                raise ValueError(f"Invalid wav framerate={fr} for {audio_path}")
+            return (nframes / float(fr), "audio_wav")
+    except Exception as e:
+        uid = record.get("unique_id")
+        raise RuntimeError(f"Failed to read WAV duration for id={uid} path={audio_path}: {e}")
+
+
+def split_easy_hard(records: List[Dict], threshold_sec: float, fps: float) -> Tuple[List[Dict], List[Dict]]:
+    easy: List[Dict] = []
+    hard: List[Dict] = []
+
+    for r in records:
+        dur, dur_src = compute_duration_sec(r, fps=fps)
+        r2 = dict(r)
+        r2["duration_sec"] = float(dur)
+        r2["duration_source"] = dur_src
+        if dur <= threshold_sec:
+            hard.append(r2)
+        else:
+            easy.append(r2)
+
+    return easy, hard
+
+
+def word_count_stats(records: List[Dict]) -> Dict:
+    counts = [len((r.get("transcript") or "").split()) for r in records]
+    if not counts:
+        return {"min": 0, "max": 0, "avg": 0.0, "median": 0.0}
+
+    return {
+        "min": int(min(counts)),
+        "max": int(max(counts)),
+        "avg": float(sum(counts) / len(counts)),
+        "median": float(statistics.median(counts)),
     }
-    total_seen = 0
-    total_kept = 0
-    all_durations: List[float] = []
-    dropped_lt_threshold_lines: List[str] = []
-    dropped_gt_threshold_lines: List[str] = []
-
-    wav_records = []
-
-    for mode_dir in video_mode_dirs:
-        video_root_name, mode = parse_video_root(mode_dir)
-        text_root_name = corresponding_root_name(video_root_name, "roomreader_text")
-        av_root_name = corresponding_root_name(video_root_name, "roomreader_av")
-
-        kept_by_mode.setdefault(mode, set())
-
-        for wav_path in mode_dir.rglob("*.wav"):
-            clip_id = wav_path.stem
-            duration = wav_duration_seconds(wav_path)
-
-            # Relative session path under mode dir, e.g. S01/abc.wav
-            rel_under_mode = wav_path.relative_to(mode_dir)
-            session_rel = rel_under_mode.parent
-
-            wav_records.append({
-                "video_root_name": video_root_name,
-                "text_root_name": text_root_name,
-                "av_root_name": av_root_name,
-                "mode": mode,
-                "wav_path": wav_path,
-                "clip_id": clip_id,
-                "duration": duration,
-                "session_rel": session_rel,
-            })
-
-    # Print stats window before copying/filtering
-    all_durations = [float(r["duration"]) for r in wav_records]
-    print_duration_histogram(all_durations, max_sec=30)
-
-    # Filter + copy pass
-    for rec in wav_records:
-        total_seen += 1
-        duration = float(rec["duration"])
-
-        if duration < min_duration:
-            rel = rec["wav_path"].relative_to(src_root)
-            clip_id = str(rec["clip_id"])
-            mode = str(rec["mode"])
-            text_root_name = str(rec["text_root_name"])
-            session_rel = Path(rec["session_rel"])
-            txt_path = src_root / text_root_name / mode / session_rel / f"{clip_id}.txt"
-            transcript = read_transcript_if_exists(txt_path).replace("\n", " ").replace("\t", " ")
-            dropped_lt_threshold_lines.append(f"{rel}\t{duration:.6f}\t{transcript}")
-
-        if max_duration is not None and duration > max_duration:
-            rel = rec["wav_path"].relative_to(src_root)
-            clip_id = str(rec["clip_id"])
-            mode = str(rec["mode"])
-            text_root_name = str(rec["text_root_name"])
-            session_rel = Path(rec["session_rel"])
-            txt_path = src_root / text_root_name / mode / session_rel / f"{clip_id}.txt"
-            transcript = read_transcript_if_exists(txt_path).replace("\n", " ").replace("\t", " ")
-            dropped_gt_threshold_lines.append(f"{rel}\t{duration:.6f}\t{transcript}")
-
-        if not (duration > min_duration):
-            continue
-
-        if max_duration is not None and duration > max_duration:
-            continue
-
-        clip_id = str(rec["clip_id"])
-        mode = str(rec["mode"])
-        video_root_name = str(rec["video_root_name"])
-        text_root_name = str(rec["text_root_name"])
-        av_root_name = str(rec["av_root_name"])
-        session_rel = Path(rec["session_rel"])
-        wav_path = Path(rec["wav_path"])
-
-        total_kept += 1
-        kept_by_mode[mode].add(clip_id)
-
-        src_video_mp4 = wav_path.with_suffix(".mp4")
-        src_audio_wav = wav_path
-        src_text_txt = src_root / text_root_name / mode / session_rel / f"{clip_id}.txt"
-        src_av_mp4 = src_root / av_root_name / mode / session_rel / f"{clip_id}_av.mp4"
-        src_av_txt = src_root / av_root_name / mode / session_rel / f"{clip_id}.txt"
-
-        dst_video_mp4 = dst_root / video_root_name / mode / session_rel / f"{clip_id}.mp4"
-        dst_audio_wav = dst_root / video_root_name / mode / session_rel / f"{clip_id}.wav"
-        dst_text_txt = dst_root / text_root_name / mode / session_rel / f"{clip_id}.txt"
-        dst_av_mp4 = dst_root / av_root_name / mode / session_rel / f"{clip_id}_av.mp4"
-        dst_av_txt = dst_root / av_root_name / mode / session_rel / f"{clip_id}.txt"
-
-        if safe_copy(src_video_mp4, dst_video_mp4):
-            copied["video_mp4"] += 1
-        if safe_copy(src_audio_wav, dst_audio_wav):
-            copied["audio_wav"] += 1
-        if safe_copy(src_text_txt, dst_text_txt):
-            copied["text_txt"] += 1
-        if safe_copy(src_av_mp4, dst_av_mp4):
-            copied["av_mp4"] += 1
-        if safe_copy(src_av_txt, dst_av_txt):
-            copied["av_txt"] += 1
-
-    dropped_log_path = dst_root / f"dropped_lt_{str(min_duration).replace('.', 'p')}s.txt"
-    dropped_log_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(dropped_log_path, "w", encoding="utf-8") as f:
-        f.write("# Files with duration below threshold\n")
-        f.write(f"# Threshold: < {min_duration:.6f} seconds\n")
-        f.write("# Format: relative_wav_path<TAB>duration_seconds<TAB>transcript\n")
-        for line in dropped_lt_threshold_lines:
-            f.write(line + "\n")
-
-    dropped_gt_log_path = None
-    if max_duration is not None:
-        dropped_gt_log_path = dst_root / f"dropped_gt_{str(max_duration).replace('.', 'p')}s.txt"
-        dropped_gt_log_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(dropped_gt_log_path, "w", encoding="utf-8") as f:
-            f.write("# Files with duration above threshold\n")
-            f.write(f"# Threshold: > {max_duration:.6f} seconds\n")
-            f.write("# Format: relative_wav_path<TAB>duration_seconds<TAB>transcript\n")
-            for line in dropped_gt_threshold_lines:
-                f.write(line + "\n")
-
-    print("\n=== Duration filtering summary ===")
-    print(f"Source root: {src_root}")
-    print(f"Destination root: {dst_root}")
-    print(f"Min duration (strict): > {min_duration:.3f}s")
-    if max_duration is not None:
-        print(f"Max duration (strict): <= {max_duration:.3f}s")
-    print(f"Total clips scanned: {total_seen}")
-    print(f"Total clips kept: {total_kept}")
-    print(f"Total clips removed: {total_seen - total_kept}")
-    print(f"Logged (<{min_duration:.3f}s) files: {len(dropped_lt_threshold_lines)}")
-    print(f"Dropped log path: {dropped_log_path}")
-    if max_duration is not None:
-        print(f"Logged (>{max_duration:.3f}s) files: {len(dropped_gt_threshold_lines)}")
-        print(f"Dropped long-file log path: {dropped_gt_log_path}")
-    print("Copied files:")
-    print(f"  mp4 (video): {copied['video_mp4']}")
-    print(f"  wav (audio): {copied['audio_wav']}")
-    print(f"  txt (text):  {copied['text_txt']}")
-    print(f"  mp4 (AV):    {copied['av_mp4']}")
-    print(f"  txt (AV):    {copied['av_txt']}")
-
-    for mode, ids in kept_by_mode.items():
-        print(f"  Kept IDs in {mode}: {len(ids)}")
-
-    return kept_by_mode
 
 
-def filter_label_csvs(src_root: Path, dst_root: Path, kept_by_mode: Dict[str, Set[str]]) -> None:
-    """Filter roomreader_*.csv files by kept unique_id and write to destination labels/."""
-    src_labels = src_root / "labels"
-    if not src_labels.exists():
-        print("ℹ️ No labels/ folder found in source. Skipping CSV filtering.")
-        return
-
-    dst_labels = dst_root / "labels"
-    dst_labels.mkdir(parents=True, exist_ok=True)
-
-    csv_files = sorted(src_labels.glob("roomreader_*.csv"))
-    if not csv_files:
-        print("ℹ️ No roomreader_*.csv files found in labels/. Skipping CSV filtering.")
-        return
-
-    print("\n=== Filtering label CSV files ===")
-    for csv_path in csv_files:
-        mode = "conversational" if "conversational" in csv_path.name.lower() else "individual"
-        keep_ids = kept_by_mode.get(mode, set())
-
-        dst_csv = dst_labels / csv_path.name
-        kept_rows = 0
-        total_rows = 0
-
-        with open(csv_path, "r", encoding="utf-8", newline="") as src_f:
-            reader = csv.DictReader(src_f)
-            fieldnames = reader.fieldnames
-            if not fieldnames:
-                print(f"⚠️ Skipping empty CSV: {csv_path.name}")
-                continue
-
-            with open(dst_csv, "w", encoding="utf-8", newline="") as dst_f:
-                writer = csv.DictWriter(dst_f, fieldnames=fieldnames)
-                writer.writeheader()
-
-                for row in reader:
-                    total_rows += 1
-                    uid = row.get("unique_id", "")
-                    if uid in keep_ids:
-                        writer.writerow(row)
-                        kept_rows += 1
-
-        print(f"{csv_path.name}: kept {kept_rows}/{total_rows}")
+_WORD_RE = re.compile(r"[A-Za-z0-9']+")
 
 
-def main() -> None:
+def _tokenize_words(text: str) -> List[str]:
+    # Simple, robust "word" tokenization that ignores punctuation.
+    return [m.group(0).lower() for m in _WORD_RE.finditer(text or "")]
+
+
+def word_level_analysis(records: List[Dict], top_k: int = 30) -> Dict:
+    """Compute word-level stats from transcripts (derived from .wrd lines)."""
+
+    word_freq: Dict[str, int] = {}
+    uniq_words_per_utt: List[int] = []
+    total_words = 0
+
+    for r in records:
+        words = _tokenize_words(r.get("transcript") or "")
+        total_words += len(words)
+        uniq_words_per_utt.append(len(set(words)))
+        for w in words:
+            word_freq[w] = word_freq.get(w, 0) + 1
+
+    vocab_size = len(word_freq)
+    top_words = sorted(word_freq.items(), key=lambda kv: (-kv[1], kv[0]))[:top_k]
+    hapax_count = sum(1 for c in word_freq.values() if c == 1)
+
+    long_words = [(w, c) for (w, c) in word_freq.items() if len(w) >= 7]
+    top_long_words = sorted(long_words, key=lambda kv: (-kv[1], kv[0]))[:top_k]
+
+    uniq_stats = {
+        "min": int(min(uniq_words_per_utt)) if uniq_words_per_utt else 0,
+        "max": int(max(uniq_words_per_utt)) if uniq_words_per_utt else 0,
+        "avg": float(sum(uniq_words_per_utt) / len(uniq_words_per_utt)) if uniq_words_per_utt else 0.0,
+        "median": float(statistics.median(uniq_words_per_utt)) if uniq_words_per_utt else 0.0,
+    }
+
+    return {
+        "total_words": int(total_words),
+        "vocab_size": int(vocab_size),
+        "hapax_count": int(hapax_count),
+        "hapax_ratio": float(hapax_count / vocab_size) if vocab_size else 0.0,
+        "unique_words_per_utt": uniq_stats,
+        "top_words": [{"word": w, "count": c} for (w, c) in top_words],
+        "top_long_words": [{"word": w, "count": c} for (w, c) in top_long_words],
+    }
+
+
+def duration_hours(records: List[Dict]) -> float:
+    total_sec = sum(float(r.get("duration_sec", 0.0)) for r in records)
+    return total_sec / 3600.0
+
+
+def duration_audit(records: List[Dict], fps: float) -> Dict:
+    """Compare wav-read duration with manifest-derived duration (if possible)."""
+
+    wav_secs: List[float] = []
+    manifest_secs: List[float] = []
+    ratios: List[float] = []
+
+    for r in records:
+        dur, _src = compute_duration_sec(r, fps=fps)
+        wav_secs.append(dur)
+
+        nfv = r.get("nframes_video")
+        if isinstance(nfv, int) and nfv >= 0 and fps > 0:
+            ms = nfv / fps
+            manifest_secs.append(ms)
+        else:
+            ms = None
+
+        if ms is not None and dur > 0:
+            ratios.append(ms / dur)
+
+    def _summ(x: List[float]) -> Dict:
+        if not x:
+            return {"count": 0}
+        return {
+            "count": len(x),
+            "min": float(min(x)),
+            "max": float(max(x)),
+            "avg": float(sum(x) / len(x)),
+            "median": float(statistics.median(x)),
+        }
+
+    return {
+        "wav_duration_sec": _summ(wav_secs),
+        "manifest_duration_sec": _summ(manifest_secs),
+        "manifest_over_wav_ratio": _summ(ratios),
+    }
+
+
+def write_subset(
+    out_dir: Path,
+    records: List[Dict],
+    subset_name: str,
+    fps: float,
+) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    tsv_path = out_dir / "test.tsv"
+    wrd_path = out_dir / "test.wrd"
+    tokens_path = out_dir / "test.tokens.txt"
+    label_csv_path = out_dir / "label.csv"
+    avsr_csv_path = out_dir / f"{subset_name}_test_transcript_lengths_seg16s.csv"
+
+    tt = TextTransform()
+
+    # Write manifests
+    with open(tsv_path, "w", encoding="utf8") as ftsv, open(wrd_path, "w", encoding="utf8") as fwrd:
+        ftsv.write("/\n")
+        for r in records:
+            nfv = int(r.get("nframes_video", -1))
+            nfa = r.get("nframes_audio")
+            if nfa is None or (isinstance(nfa, int) and nfa < 0):
+                dur = float(r.get("duration_sec", (nfv / fps) if (nfv >= 0 and fps > 0) else 0.0))
+                nfa = int(dur * 16000)
+
+            audio_path = r["audio_path"]
+
+            ftsv.write(
+                "\t".join([
+                    str(r["unique_id"]),
+                    str(r["video_path"]),
+                    str(audio_path),
+                    str(nfv),
+                    str(nfa),
+                ]) + "\n"
+            )
+            fwrd.write((r.get("transcript") or "") + "\n")
+
+    # Write tokens + CSVs
+    with open(tokens_path, "w", encoding="utf8") as ftok, open(label_csv_path, "w", encoding="utf8") as flab, open(avsr_csv_path, "w", encoding="utf8") as fav:
+        for r in records:
+            text = r.get("transcript") or ""
+            token_ids = tt.tokenize(text)
+            token_str = " ".join(str(t.item()) for t in token_ids)
+            ftok.write(token_str + "\n")
+            flab.write(f"{subset_name},{r['video_path']},{token_str}\n")
+            fav.write(f"{subset_name},{r['video_path']},{r.get('nframes_video', -1)},{token_str}\n")
+
+    src_counts: Dict[str, int] = {}
+    for r in records:
+        src = r.get("duration_source", "unknown")
+        src_counts[src] = src_counts.get(src, 0) + 1
+
+    stats = {
+        "subset": subset_name,
+        "utterances": len(records),
+        "duration_hours": duration_hours(records),
+        "word_count": word_count_stats(records),
+        "word_analysis": word_level_analysis(records),
+        "duration_audit": duration_audit(records, fps=fps),
+        "duration_source_counts": src_counts,
+        "fps": fps,
+    }
+
+    (out_dir / "stats.json").write_text(json.dumps(stats, indent=2), encoding="utf8")
+    (out_dir / "stats.txt").write_text(
+        "\n".join([
+            f"subset: {subset_name}",
+            f"utterances: {stats['utterances']}",
+            f"duration_hours: {stats['duration_hours']:.4f}",
+            f"word_count_min: {stats['word_count']['min']}",
+            f"word_count_max: {stats['word_count']['max']}",
+            f"word_count_avg: {stats['word_count']['avg']:.4f}",
+            f"word_count_median: {stats['word_count']['median']:.4f}",
+            f"duration_sources: {json.dumps(stats['duration_source_counts'], sort_keys=True)}",
+            f"total_words: {stats['word_analysis']['total_words']}",
+            f"vocab_size: {stats['word_analysis']['vocab_size']}",
+            f"hapax_count: {stats['word_analysis']['hapax_count']}",
+            f"hapax_ratio: {stats['word_analysis']['hapax_ratio']:.4f}",
+            "top_words:",
+            *[f"  {d['word']}\t{d['count']}" for d in stats["word_analysis"]["top_words"]],
+        ]) + "\n",
+        encoding="utf8",
+    )
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Filter processed RoomReader data by duration and copy kept files to a new root.",
+        description="Split RoomReader Step2 metadata into RR_easy/RR_hard and write AV-HuBERT + Auto-AVSR artifacts.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--src-root", required=True, help="Path to processed RoomReader root (contains roomreader_video*, roomreader_text*, labels, etc.)")
-    parser.add_argument("--dst-root", required=True, help="Path to write filtered RoomReader dataset")
-    parser.add_argument("--min-duration-sec", type=float, default=1.0, help="Keep clips with duration strictly greater than this value")
-    parser.add_argument("--max-duration-sec", type=float, default=None, help="Optional upper bound: keep clips with duration less than or equal to this value")
-
+    parser.add_argument("--metadata-dir", required=True, help="Step2 metadata folder (contains test.tsv + test.wrd)")
+    parser.add_argument("--output-dir", required=True, help="Output folder for RR_easy/ and RR_hard/")
+    parser.add_argument("--duration-threshold", type=float, default=2.0, help="<= threshold => hard; > threshold => easy")
+    parser.add_argument("--fps", type=float, default=25.0, help="FPS used to convert nframes_video -> seconds")
     args = parser.parse_args()
 
-    src_root = Path(args.src_root)
-    dst_root = Path(args.dst_root)
+    metadata_dir = Path(args.metadata_dir).resolve()
+    output_dir = Path(args.output_dir).resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    if not src_root.exists():
-        raise FileNotFoundError(f"Source root does not exist: {src_root}")
+    records = read_test_tsv_wrd(metadata_dir)
+    if not records:
+        print(f"No records found in {metadata_dir}. Nothing to do.")
+        return 0
 
-    if args.max_duration_sec is not None and args.max_duration_sec <= args.min_duration_sec:
-        raise ValueError("--max-duration-sec must be greater than --min-duration-sec")
+    easy, hard = split_easy_hard(records, args.duration_threshold, args.fps)
 
-    dst_root.mkdir(parents=True, exist_ok=True)
+    print(f"Loaded {len(records)} utterances from {metadata_dir}")
+    print(f"Threshold: {args.duration_threshold:.3f}s (fps={args.fps})")
+    print(f"RR_easy: {len(easy)}")
+    print(f"RR_hard: {len(hard)}")
 
-    kept_by_mode = collect_kept_ids_and_copy(
-        src_root,
-        dst_root,
-        args.min_duration_sec,
-        args.max_duration_sec,
+    write_subset(
+        output_dir / "RR_easy",
+        easy,
+        subset_name="RR_easy",
+        fps=args.fps,
     )
-    filter_label_csvs(src_root, dst_root, kept_by_mode)
+    write_subset(
+        output_dir / "RR_hard",
+        hard,
+        subset_name="RR_hard",
+        fps=args.fps,
+    )
 
-    print("\n✅ Done. Filtered RoomReader dataset is ready.")
+    easy_stats = json.loads((output_dir / "RR_easy" / "stats.json").read_text(encoding="utf8"))
+    hard_stats = json.loads((output_dir / "RR_hard" / "stats.json").read_text(encoding="utf8"))
+    print("\n=== Summary ===")
+    print(f"RR_easy hours: {easy_stats['duration_hours']:.3f} | word_avg: {easy_stats['word_count']['avg']:.2f}")
+    print(f"RR_hard hours: {hard_stats['duration_hours']:.3f} | word_avg: {hard_stats['word_count']['avg']:.2f}")
+    print(f"Wrote to: {output_dir}")
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
+

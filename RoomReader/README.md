@@ -388,42 +388,57 @@ python step2.py \
 - `--random-split`: Use random splitting instead of speaker-based splitting
 - `--seed`: Random seed for reproducible splits (default: 42)
 
-### Step 3: Duration-Based Dataset Filtering (`filter_roomreader_by_duration.py`)
-Filters processed RoomReader clips by duration and copies only kept samples to a new output root while preserving folder structure.
+### Step 3: Split into RR_easy / RR_hard by duration (`preparation/step3_filter_roomreader_by_duration.py`)
 
-**What it filters/copies:**
-- `roomreader_video_*` (`.mp4`, `.wav`)
-- `roomreader_text_*` (`.txt`)
-- `roomreader_av_*` (`*_av.mp4` and transcript `.txt`, if present)
-- `labels/roomreader_*.csv` (rows filtered by `unique_id`)
+This step takes the **Step 2 manifests** (e.g. `manifests/individual/`) and splits the utterances into two subsets:
 
-**Duration rules:**
-- Always applies lower bound: keep clips with duration `> --min-duration-sec`
-- Optional upper bound: keep clips with duration `<= --max-duration-sec`
+- **RR_hard**: duration $\le$ 2 seconds
+- **RR_easy**: duration $>$ 2 seconds
 
-**Stats + logs:**
-- Prints duration histogram at start: `0-1s`, `1-2s`, ..., `29-30s`, `>=30s`
-- Writes dropped-file logs into destination root:
-  - `dropped_lt_<min>s.txt` (below min)
-  - `dropped_gt_<max>s.txt` (above max, only if max is provided)
-- Log row format:
-  - `relative_wav_path<TAB>duration_seconds<TAB>transcript`
+It then writes both subsets in **AV-HuBERT manifest format** (`test.tsv` + `test.wrd`) and also produces:
 
-**Usage:**
+- `test.tokens.txt` and `label.csv` (SentencePiece ids via the repo shared SPM)
+- Auto-AVSR CSV: `RR_easy_test_transcript_lengths_seg16s.csv` / `RR_hard_test_transcript_lengths_seg16s.csv`
+- `stats.json` and `stats.txt` with:
+  - utterance counts
+  - total duration (hours)
+  - word-count stats
+  - word-level frequency summary from `.wrd` (top words, vocab size, etc.)
+
+**Important:** duration is computed by **reading the audio WAV files on disk** referenced by `audio_path` in the TSV (ground truth). No frame-count columns are used.
+
+#### Usage (recommended: individual subset)
+
 ```bash
-# Keep clips longer than 1 second
-python preparation/filter_roomreader_by_duration.py \
-  --src-root /path/to/roomreader_processed \
-  --dst-root /path/to/roomreader_processed_gt1s \
-  --min-duration-sec 1.0
-
-# Keep clips in (1.0, 30.0] seconds
-python preparation/filter_roomreader_by_duration.py \
-  --src-root /path/to/roomreader_processed \
-  --dst-root /path/to/roomreader_processed_1to30s \
-  --min-duration-sec 1.0 \
-  --max-duration-sec 30.0
+python preparation/step3_filter_roomreader_by_duration.py \
+  --metadata-dir /path/to/manifests/individual \
+  --output-dir   /path/to/manifests_individual_easy_hard
 ```
+
+This creates:
+
+```
+/path/to/manifests_individual_easy_hard/
+  RR_easy/
+    test.tsv
+    test.wrd
+    test.tokens.txt
+    label.csv
+    RR_easy_test_transcript_lengths_seg16s.csv
+    stats.json
+    stats.txt
+  RR_hard/
+    ...same files...
+```
+
+#### Note: conversational / combined
+
+You can run the exact same script on the Step 2 folders for other modes:
+
+- `--metadata-dir /path/to/manifests/conversational`
+- `--metadata-dir /path/to/manifests/combined`
+
+Just set a different `--output-dir` per mode.
 
 ## Output Format
 
