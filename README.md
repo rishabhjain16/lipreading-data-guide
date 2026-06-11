@@ -1,6 +1,6 @@
 # Lipreading Data Guide
 
-A comprehensive toolkit for preparing popular lip reading and visual speech recognition datasets into a unified, standardized format that simplifies model training workflows.
+A comprehensive toolkit for preparing popular lipreading and audio-visual speech recognition datasets into a unified, standardized format. Automates preprocessing steps including face tracking, mouth ROI extraction, and transcript alignment to simplify model training workflows. Works well with AV-HuBERT and Auto-AVSR.
 
 ## Supported Datasets
 
