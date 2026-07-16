@@ -34,6 +34,10 @@ A comprehensive toolkit for preparing popular lipreading and audio-visual speech
 
 Each dataset folder includes comprehensive documentation with step-by-step instructions for data acquisition, preprocessing, and preparation. Navigate to the specific dataset directory for detailed setup guides and processing workflows.
 
+## Roadmap
+
+We plan to expand the toolkit beyond English-centric benchmarks by adding support for multilingual and multi-party conversational datasets, including MultiVSR, MARC, MISP, MLD-VC, CI-AVSR, RUSAVIC, KMSAV, VISPER, Friends-MMC, AVSD, HAVRUS, ViCocktail, OLKAVS, F2F-JF, and Seamless Interaction. We believe these datasets can be effectively converted into a unified format, making them readily usable for AVSR and VSR research while enabling more comprehensive and standardized benchmarking across diverse languages and conversational settings.
+
 ## Dataset References
 
 1. **LRS2**: Afouras, T., Chung, J. S., Senior, A., Vinyals, O., & Zisserman, A. (2018). Deep Audio-Visual Speech Recognition. *IEEE Transactions on Pattern Analysis and Machine Intelligence*. [https://www.robots.ox.ac.uk/~vgg/data/lip_reading/lrs2.html](https://www.robots.ox.ac.uk/~vgg/data/lip_reading/lrs2.html)
