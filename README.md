@@ -38,6 +38,10 @@ Each dataset folder includes comprehensive documentation with step-by-step instr
 
 We plan to expand the toolkit beyond English-centric benchmarks by adding support for multilingual and multi-party conversational datasets, including MultiVSR, MARC, MISP, MLD-VC, CI-AVSR, RUSAVIC, KMSAV, VISPER, Friends-MMC, AVSD, HAVRUS, ViCocktail, OLKAVS, F2F-JF, and Seamless Interaction. We believe these datasets can be effectively converted into a unified format, making them readily usable for AVSR and VSR research while enabling more comprehensive and standardized benchmarking across diverse languages and conversational settings.
 
+## Community Contributions
+
+This toolkit is designed as a community-driven project rather than a closed framework. We welcome contributions that add support for new datasets, improve dataset conversion recipes, or introduce standardized evaluation protocols. Our goal is to build a unified and extensible infrastructure for AVSR research that enables consistent training and evaluation across diverse datasets.
+
 ## Dataset References
 
 1. **LRS2**: Afouras, T., Chung, J. S., Senior, A., Vinyals, O., & Zisserman, A. (2018). Deep Audio-Visual Speech Recognition. *IEEE Transactions on Pattern Analysis and Machine Intelligence*. [https://www.robots.ox.ac.uk/~vgg/data/lip_reading/lrs2.html](https://www.robots.ox.ac.uk/~vgg/data/lip_reading/lrs2.html)
