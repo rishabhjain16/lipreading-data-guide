@@ -32,7 +32,8 @@ python preparation/step3_train_candor_spm.py \
   - `spm5000/unigram/unigram5000_units.txt` (for TextTransform)
   - `dict.wrd.txt` (Fairseq-style dictionary)
 
-**Note:** The legacy `step2_generate_file_lists.py` is no longer required for the standard workflow. Use it only for legacy/compatibility purposes.
+**Note 1:** The legacy `step2_generate_file_lists.py` is no longer required for the standard workflow. Use it only for legacy/compatibility purposes.
+**Note 2:** We wanted to keep the original 30 fps of the video candor video. We convert it to 25fps for AVSR/VSR experiments using the **fps_converter.py** in the main repo.
 
 ### Output Structure
 
