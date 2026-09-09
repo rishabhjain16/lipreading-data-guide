@@ -37,7 +37,7 @@ python preparation/step3_train_candor_spm.py \
 **Note 2:** We wanted to keep the original 30 fps of the candor videos. We convert it later to 25fps for AVSR/VSR experiments using the **fps_converter.py** in the main repo.
 
 ### Output Structure
-
+```
 candor_output/
 ├── candor_video/              # Videos + Audio
 │   └── {session_id}/
@@ -59,7 +59,7 @@ candor_output/
     │       ├── unigram5000.vocab
     │       └── unigram5000_units.txt
     └── dict.wrd.txt
-
+```
 **Note**: SPM files are created in Step 3. Tokenization for downstream tasks should use the model and units file from `spm5000/unigram/`.
 
 ---
