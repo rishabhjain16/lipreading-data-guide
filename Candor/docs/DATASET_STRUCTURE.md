@@ -381,22 +381,6 @@ candor_video/
 | **Video Quality** | 320x240, 30fps | 224x224, 25fps | Variable (online) | 360x288, 25fps |
 | **Transcripts** | Word + turn-level | Sentence-level | Word-level | Sentence-level |
 
-**Candor's Unique Challenges**:
-- ✅ Conversational dynamics (overlaps, turn-taking)
-- ✅ Natural speech (disfluencies, interruptions)
-- ✅ Longer segments requiring smart segmentation
-- ✅ Two speakers per video (need individual processing)
-
----
-
-## Next Steps
-
-1. **Decide on segmentation strategy**: Word-level, phrase-level, or turn-level
-2. **Create preprocessing script**: Adapt RoomReader/LRS3 pipeline for Candor
-3. **Handle overlaps**: Filter or flag overlapping segments
-4. **Test on sample**: Process 1-2 sessions to validate pipeline
-5. **Scale to full dataset**: Process all sessions with parallel processing
-
 ---
 
 ## Files Summary
@@ -414,13 +398,5 @@ candor_video/
 - `audio_video_features.csv` - Pre-extracted features (not needed for raw AVSR)
 
 ---
-
-## Questions to Resolve
-
-1. **Segmentation granularity**: Word-level, phrase-level (2-5s), or turn-level?
-2. **Overlap handling**: Skip overlaps or keep for conversational AVSR?
-3. **Minimum segment length**: Filter segments <1 second?
-4. **Data split strategy**: Session-based or speaker-based?
-5. **Transcript source**: Use Speechmatics JSON (word-level) or CSV (turn-level)?
 
 **Recommendation**: Start with **phrase-level segmentation** (2-5 seconds) using **Speechmatics JSON**, **skip overlaps** for clean training data, and use **session-based splits**.
